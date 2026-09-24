@@ -32,7 +32,7 @@ export function renderDebrief(s: Session, el: HTMLElement): Summary {
 
   const hz = 1000 / median(logs.flatMap((l) => l.moves.slice(1).map((m, i) => m.t - l.moves[i].t)));
   const raw = logs.every((l) => l.rawInput);
-  el.innerHTML = renderCard(sum) + `
+  el.innerHTML = renderCard(sum) + padCheck(s.intake.padCm, sum.rec?.final) + `
     <table><thead><tr><th>Code</th><th>cm/360</th><th>Score</th><th>Flick hits</th><th>Flick time</th><th>Overshoot</th><th>Track on</th><th>Micro fix</th></tr></thead><tbody>
     ${codes.map(([code, c]) => `<tr${sum.rec && r1(c.cm360) === sum.rec.final ? ' class="best"' : ''}><td>${esc(code)}</td><td>${fmt(c.cm360)}</td><td>${fmt(c.score, 0)}</td>
       <td>${fmt(c.m.flickHits)}</td><td>${fmt(c.m.flickTTT, 0)} ms</td><td>${fmt(c.m.flickOvershoot)}%</td>
@@ -70,6 +70,20 @@ export function renderCard(s: Summary): string {
     ${r ? settingsTable(s.dpi, r.final, s.aim) : ''}
     <h3>Evidence</h3>
     ${chart(s)}`;
+}
+
+// The mouse itself takes up pad width: travel room is the pad minus the mouse's footprint.
+// ponytail: fixed 6 cm (G Pro Wireless is 6.4 cm wide); make it an intake field if players' mice vary a lot
+const MOUSE_WIDTH_CM = 6;
+
+/** Physical check: can a 180° turn fit in one swipe across the pad? */
+export function padCheck(padCm: number | null | undefined, cm360: number | undefined) {
+  if (!padCm || !cm360) return '';
+  const half = cm360 / 2, room = padCm - MOUSE_WIDTH_CM;
+  const ok = half <= room;
+  return `<h3>Physical check</h3><p${ok ? '' : ' class="warn"'}>A 180° turn needs ${fmt(half)} cm of mouse travel;
+    your ${fmt(padCm, 0)} cm pad leaves about ${fmt(room, 0)} cm of room.
+    ${ok ? 'It fits in one swipe.' : 'It does not fit in one swipe; you would have to lift the mouse mid-turn.'}</p>`;
 }
 
 function settingsTable(dpi: number, cm: number, aim: number | null) {

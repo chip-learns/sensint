@@ -141,6 +141,13 @@ test('share link round-trips, stays short, and rejects tampering', async () => {
   await expect(decode('not!base64')).rejects.toThrow('malformed');
 });
 
+test('pad check: 180° travel against pad width minus the mouse', async () => {
+  const { padCheck } = await import('./ui/debrief');
+  expect(padCheck(null, 28)).toBe('');
+  expect(padCheck(45, 28)).toContain('It fits'); // 14 cm needed, 39 cm room
+  expect(padCheck(18, 28)).toContain('does not fit'); // 14 cm needed, 12 cm room
+});
+
 test('recorded session (Chip, 2026-09-24) analyses end to end', () => {
   const s = JSON.parse(gunzipSync(readFileSync('tests/fixtures/session-625932.json.gz')).toString()) as Session;
   const { points, byCode, rec } = analyze(s.trials.map((t) => ({ ...t, log: t.log! })), games.tarkov.weights);
