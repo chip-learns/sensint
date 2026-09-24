@@ -227,7 +227,7 @@ async function importFiles(files: File[]) {
     try { const r = await readBackup(file); sessions.push(...r.sessions); warmups.push(...r.warmups); }
     catch { skipped.push(file.name); }
   }
-  if (!sessions.length && !warmups.length) throw new Error(files.length > 1 ? 'none of those are SENSINT files' : 'not a SENSINT session or backup file');
+  if (!sessions.length && !warmups.length) throw new Error('no SENSINT session or backup files');
   if (warmups.length) saveWarmups(warmups);
   if (sessions.length === 1 && !warmups.length && !skipped.length) return debrief(sessions[0]);
   const scratch = document.createElement('div'); // analysis renders here, off-screen
@@ -267,12 +267,14 @@ $('debrief').addEventListener('click', async (e) => {
   if (s) debrief(s);
   else el.textContent = 'Not stored in full; open its JSON file';
 });
-$('debrief').addEventListener('change', (e) => {
+/** Both file pickers: import the chosen files, clearing the input so the same file can be picked again. */
+function pick(e: Event) {
   const input = e.target as HTMLInputElement;
-  const files = input.matches('[data-import]') ? [...(input.files ?? [])] : [];
+  const files = [...(input.files ?? [])];
   input.value = '';
   if (files.length) importFiles(files).catch(fail);
-});
+}
+$('debrief').addEventListener('change', (e) => { if ((e.target as HTMLElement).matches('[data-import]')) pick(e); });
 $('history').addEventListener('click', showFile);
 $('mine-open').addEventListener('click', showFile);
 
@@ -396,9 +398,4 @@ $('export').addEventListener('click', () => {
   URL.revokeObjectURL(a.href);
 });
 
-$<HTMLInputElement>('open').addEventListener('change', async (e) => {
-  const input = e.target as HTMLInputElement;
-  const files = [...(input.files ?? [])];
-  input.value = '';
-  if (files.length) await importFiles(files).catch(fail);
-});
+$('open').addEventListener('change', pick);
