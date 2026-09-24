@@ -5,7 +5,7 @@ import games from '../data/games.json';
 import { angleBetween, applyMove, nextTarget, rng } from './analysis/aim';
 import { analyze, doorStats, fitQuadratic, flicks, recommend, trackStats } from './analysis/score';
 import { adsFovH, aimingForRedDot, cm360FromGame, degPerCount, gameSensFromCm360, redDotCm360 } from './analysis/sens';
-import { doorways, DRILLS, nudge, strafe } from './drills';
+import { doorway, DRILLS, nudge, pan, strafe } from './drills';
 import type { DrillLog } from './drills/stage';
 import { candidates, schedule, type Session } from './session';
 import { decode, encode, type Summary } from './share';
@@ -53,9 +53,16 @@ test('strafe path is seeded, bounded and continuous', () => {
 
 test('Phase 2 drills: doorways, scope walker, large turns, presets', () => {
   for (let s = 0; s < 50; s++) {
-    const [a, b] = doorways(rng(s));
-    expect(Math.sign(a.yaw)).toBe(-Math.sign(b.yaw)); // opposite sides
-    for (const d of [a, b]) expect(Math.abs(d.yaw)).toBeGreaterThanOrEqual(4);
+    const { center, spots } = doorway(rng(s));
+    expect(Math.abs(center.yaw)).toBeGreaterThanOrEqual(5);
+    expect(spots).toHaveLength(4);
+    // two edges × two heights, all inside the 3° × 6° frame
+    expect(new Set(spots.map((p) => p.yaw.toFixed(3))).size).toBe(2);
+    expect(new Set(spots.map((p) => p.pitch.toFixed(3))).size).toBe(2);
+    for (const p of spots) {
+      expect(Math.abs(p.yaw - center.yaw)).toBeLessThanOrEqual(1.5);
+      expect(Math.abs(p.pitch - center.pitch)).toBeLessThanOrEqual(3);
+    }
     const walk = strafe(rng(s), 20, 4, [0.8, 1.7], [0.8, 2]);
     for (let t = 0; t < 20; t += 0.05) {
       expect(Math.abs(walk(t))).toBeLessThanOrEqual(4 + 1e-9);
@@ -86,6 +93,25 @@ test('door watch: reaction, hit rate, early shots count as misses, drift while h
   expect(d.hit).toBe(50); // 1 of 2 peeks
   expect(d.acc).toBe(50); // 1 of 2 shots
   expect(d.drift).toBeCloseTo(0, 4); // aim sat exactly on a doorway the whole time
+});
+
+test('track pan path: seeded, bounded, capped speed, no sudden jerks, spends time cruising', () => {
+  for (let s = 0; s < 50; s++) {
+    const a = pan(rng(s), 12), b = pan(rng(s), 12);
+    const dt = 0.005;
+    let prevV = 0, cruising = 0, n = 0;
+    for (let t = 0; t < 12; t += dt) {
+      expect(a(t)).toBe(b(t));
+      expect(Math.abs(a(t))).toBeLessThanOrEqual(35 + 1e-9);
+      const v = (a(t + dt) - a(t)) / dt;
+      expect(Math.abs(v)).toBeLessThanOrEqual(28 + 0.5);
+      // max acceleration: 28°/s gained or lost over a 0.4 s ramp = 70°/s², plus reversal = 140°/s²
+      expect(Math.abs(v - prevV)).toBeLessThanOrEqual(140 * dt + 0.5);
+      if (Math.abs(v) >= 14) cruising++;
+      prevV = v; n++;
+    }
+    expect(cruising / n).toBeGreaterThan(0.3); // mostly panning, not jittering
+  }
 });
 
 test('nudge moves the target 1–3°', () => {

@@ -38,13 +38,19 @@ export type Drill = {
   click?(c: Ctx, t: number, hit: boolean): void;
 };
 
-/** Runs one drill full-screen under pointer lock. Esc ends it early with aborted = true. */
+let lastRaw = false;
+
+/**
+ * Runs one drill full-screen under pointer lock. Esc ends it early with aborted = true.
+ * The lock is kept afterwards so trials can run back to back; the caller releases it.
+ */
 export async function runDrill(
   canvas: HTMLCanvasElement,
   opts: { cm360: number; dpi: number; seed: number; fovH: number },
   drill: Drill,
 ): Promise<DrillLog> {
-  const rawInput = await lockPointer(canvas); // first, so a refused lock leaks no WebGL context
+  // Lock first, so a refused lock leaks no WebGL context. Already locked = same raw-input result.
+  const rawInput = document.pointerLockElement === canvas ? lastRaw : (lastRaw = await lockPointer(canvas));
   const zoom = drill.zoom ?? 1;
   const cm360 = opts.cm360 * zoom;
   const fovH = 2 * Math.atan(Math.tan((opts.fovH * RAD) / 2) / zoom) / RAD;
@@ -141,7 +147,6 @@ export async function runDrill(
   stopMove();
   removeEventListener('mousedown', onClick);
   body.mask = body.cue = '';
-  document.exitPointerLock();
   renderer.dispose();
   return log;
 }

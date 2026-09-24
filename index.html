@@ -33,14 +33,13 @@
       <p class="hint">Drills: <span id="preset"></span></p>
       <label>Rounds per candidate
         <select name="rounds">
-          <option value="2">2 (quicker, wider range)</option>
-          <option value="3" selected>3 (recommended)</option>
-          <option value="4">4 (tightest range)</option>
+          <option value="2" selected>2 (recommended)</option>
+          <option value="3">3 (longer, narrower range)</option>
         </select>
       </label>
       <label>Seed <input name="seed" type="number" /></label>
       <button id="begin" type="submit">Begin session</button>
-      <button id="quick" type="button" class="secondary">Quick Flick test (20 s)</button>
+      <button id="quick" type="button" class="secondary">Quick Flick test (12 s)</button>
       <label class="file-btn secondary">Open saved session <input id="open" type="file" accept=".json,application/json" /></label>
       <p class="hint">Chrome or Edge recommended for raw input. Esc aborts a trial; it restarts from the beginning.</p>
     </form>
@@ -64,6 +63,7 @@
   <canvas id="stage" hidden></canvas>
   <div id="crosshair" hidden></div>
   <div id="mask" aria-hidden="true"></div>
+  <div id="next" hidden></div>
   <div id="cue" aria-hidden="true"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>

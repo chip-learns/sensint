@@ -13,6 +13,8 @@ type GameId = keyof typeof games;
 // ponytail: fixed CS2 hip FOV (106.26° at 16:9); per-game FOV matching lands in Phase 2
 const FOV_H = 106.26;
 const K = games.tarkov.adsFactor;
+const COUNTDOWN_MS = 2000; // between back-to-back trials
+const WARMUP_S = 30;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
@@ -35,10 +37,12 @@ const baseline = () => {
   const red = redDot(cm);
   $('reddot-row').hidden = f.kind.value !== 'ads';
   f.reddot.value = Number.isFinite(red) ? red.toFixed(1) : '— (needs Tarkov + aiming sensitivity)';
-  // 75 s warm-up + per round 5 candidates × (the preset's drills + ~5 s of briefing each)
+  // warm-up + per round 5 candidates × (the preset's drills + the countdown before each),
+  // + ~10 s for each drill type's first card
   const drills = preset();
-  const perCandidate = drills.reduce((s, d) => s + DRILLS[d].seconds + 5, 0);
-  $('begin').textContent = `Begin session (~${Math.round((75 + +f.rounds.value * 5 * perCandidate) / 60)} min)`;
+  const perCandidate = drills.reduce((s, d) => s + DRILLS[d].seconds + COUNTDOWN_MS / 1000, 0);
+  const secs = WARMUP_S + drills.length * 10 + +f.rounds.value * 5 * perCandidate;
+  $('begin').textContent = `Begin session (~${Math.round(secs / 60)} min)`;
   $('preset').textContent = drills.map((d) => DRILLS[d].label).join(' · ');
   return cm;
 };
@@ -72,14 +76,40 @@ const brief = (kicker: string, title: string, text: string) =>
     $('go').onclick = () => resolve();
   });
 
-/** Brief, run, and re-run on Esc until a clean log comes back. */
-async function play(kicker: string, title: string, text: string, cm360: number, make: () => Drill, seed: number, fovH: number) {
+
+/** "Next: …" overlay while still locked. Resolves false if the player pressed Esc during it. */
+const countdown = (label: string) =>
+  new Promise<boolean>((resolve) => {
+    const el = $('next');
+    const end = performance.now() + COUNTDOWN_MS;
+    el.hidden = false;
+    const tick = () => {
+      if (!document.pointerLockElement) { el.hidden = true; return resolve(false); }
+      const left = Math.ceil((end - performance.now()) / 1000);
+      if (left <= 0) { el.hidden = true; return resolve(true); }
+      el.textContent = `Next: ${label} · ${left}`;
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+
+/**
+ * Run one trial and re-run it on Esc until a clean log comes back. While the pointer stays locked,
+ * trials run back to back after a short countdown; a card (and a click) only appears the first time
+ * a drill type shows up, or after Esc.
+ */
+async function play(kicker: string, title: string, text: string, cm360: number, make: () => Drill, seed: number, fovH: number, needBrief: boolean) {
   for (;;) {
-    await brief(kicker, title, text);
-    show('stage');
+    if (needBrief && document.pointerLockElement) {
+      // Exiting is asynchronous; wait for it so the card (not the countdown) shows.
+      await new Promise((r) => { document.addEventListener('pointerlockchange', r, { once: true }); document.exitPointerLock(); });
+    }
+    if (!document.pointerLockElement) { await brief(kicker, title, text); show('stage'); }
+    else if (!(await countdown(title))) { text = 'Paused. Click Start to carry on; this trial restarts from the beginning.'; needBrief = true; continue; }
     const log = await runDrill($('stage'), { cm360, dpi: +f.dpi.value, seed, fovH }, make());
     if (!log.aborted) return log;
-    text = 'Aborted. This trial restarts from the beginning with the same targets.';
+    text = 'Paused. Click Start to carry on; this trial restarts from the beginning with the same targets.';
+    needBrief = true;
   }
 }
 
@@ -117,14 +147,20 @@ async function session(quick: boolean) {
   try {
     show('brief', quick ? 'Quick test' : ads ? 'Red-dot trials' : 'Field trials');
     const warmup = quick ? null : await play('Warm-up · not scored', `Flick at your current ${ads ? 'red-dot ' : ''}sensitivity`,
-      `75 s to get your hands going. Nothing here counts.${ads ? ' You are aiming down a red dot for the whole session.' : ''}`,
-      base, () => flick(75_000), seed, fovH);
+      `${WARMUP_S} s to get your hands going. Nothing here counts. After this, trials run back to back with a short countdown; `
+        + `each new drill type gets its own card first. Press Esc any time to pause.${ads ? ' You are aiming down a red dot for the whole session.' : ''}`,
+      base, () => flick(WARMUP_S * 1000), seed, fovH, true);
+    const seen = new Set<DrillName>();
     for (const [i, t] of plan.entries()) {
       const d = DRILLS[t.drill];
-      t.log = await play(`Trial ${i + 1} of ${plan.length}`, `Candidate ${t.code} · ${d.label}${ads ? ' · red dot' : ''}`, d.brief, t.cm360, d.make, seed + i + 1, fovH);
+      t.log = await play(`Trial ${i + 1} of ${plan.length}`, `Candidate ${t.code} · ${d.label}${ads ? ' · red dot' : ''}`, d.brief,
+        t.cm360, d.make, seed + i + 1, fovH, !seen.has(t.drill));
+      seen.add(t.drill);
     }
+    document.exitPointerLock();
     debrief({ app: 'sensint', version: 1, createdAt: new Date().toISOString(), intake, candidates: cands, warmup, trials: plan });
   } catch (e) {
+    document.exitPointerLock();
     show('form', 'Intake form');
     $('warn').hidden = false;
     $('warn').textContent = `Could not start the trial: ${(e as Error).message}`;
