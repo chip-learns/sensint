@@ -4,6 +4,19 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SENSINT</title>
+  <script>
+    // Right after a deploy, a cached copy of this page can ask for script/style files the deploy
+    // just replaced. If one fails to load, reload once from a fresh URL that skips the cache.
+    addEventListener('error', function (e) {
+      var t = e.target;
+      if (!t || (t.tagName !== 'SCRIPT' && t.tagName !== 'LINK')) return;
+      try {
+        if (sessionStorage.getItem('sensint.reloaded')) return; // already tried once: don't loop
+        sessionStorage.setItem('sensint.reloaded', '1');
+      } catch (_) { return; }
+      location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+    }, true);
+  </script>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>

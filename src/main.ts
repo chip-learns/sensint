@@ -19,6 +19,10 @@ const K = games.tarkov.adsFactor;
 const COUNTDOWN_MS = 2000; // between back-to-back trials
 const WARMUP_S = 30;
 
+// Loaded fine: clear the stale-cache guard (index.html) and drop its cache-busting ?v= from the URL.
+try { sessionStorage.removeItem('sensint.reloaded'); } catch { /* storage blocked: nothing to clear */ }
+if (/[?&]v=\d+/.test(location.search)) history.replaceState(null, '', location.pathname + location.hash);
+
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
 const f = form.elements as unknown as Record<string, HTMLInputElement & HTMLOutputElement & HTMLSelectElement>;
