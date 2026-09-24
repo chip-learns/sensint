@@ -120,18 +120,19 @@ export function doorway(rand: () => number): { center: Aim; spots: Aim[] } {
 
 /**
  * Door watch: a head peeks from one of four spots in a doorway (left or right edge, standing or
- * crouched) for 250–600 ms, every 1–3 s. Shooting while nothing is showing is a miss.
+ * crouched) for 500–900 ms, every 1–3 s. Shooting while nothing is showing is a miss.
+ * Playtest: 250–600 ms peeks with a 0.9° head felt unfair (median reaction ~450 ms caught ~30%).
  */
 export const door = (durationMs = 12_000): Drill => {
   let spots: Aim[] = [], next = 0, hideAt = -1;
   const wait = (c: { rand: () => number }, t: number) => { hideAt = -1; next = t + 1000 + c.rand() * 2000; };
   return {
-    name: 'door', durationMs, radiusDeg: 0.9,
+    name: 'door', durationMs, radiusDeg: 1.3,
     start: (c, t) => { const d = doorway(c.rand); spots = d.spots; c.prop(d.center); c.show(false); wait(c, t); },
     frame: (c, t) => {
       if (hideAt >= 0 && t >= hideAt) { c.show(false); wait(c, t); }
       else if (hideAt < 0 && t >= next) {
-        const until = t + 250 + c.rand() * 350;
+        const until = t + 500 + c.rand() * 400;
         c.place(t, spots[Math.floor(c.rand() * 4)], undefined, until);
         c.show(true);
         hideAt = until;
