@@ -213,14 +213,27 @@ function showFile() {
   show('result', 'My file');
 }
 
-/** A session file opens its debrief; a backup (or several sessions) is stored, then the history shows. */
-async function importFile(file: File) {
-  const { sessions, warmups } = await readBackup(file);
+/**
+ * Any mix of session files and backups. One session on its own opens its debrief; anything more is
+ * stored and My file shows. Files that aren't SENSINT files are skipped and listed.
+ */
+async function importFiles(files: File[]) {
+  const sessions: Session[] = [], warmups: WarmupEntry[] = [], skipped: string[] = [];
+  for (const file of files) {
+    try { const r = await readBackup(file); sessions.push(...r.sessions); warmups.push(...r.warmups); }
+    catch { skipped.push(file.name); }
+  }
+  if (!sessions.length && !warmups.length) throw new Error(files.length > 1 ? 'none of those are SENSINT files' : 'not a SENSINT session or backup file');
   if (warmups.length) saveWarmups(warmups);
-  if (sessions.length === 1 && !warmups.length) return debrief(sessions[0]);
+  if (sessions.length === 1 && !warmups.length && !skipped.length) return debrief(sessions[0]);
   const scratch = document.createElement('div'); // analysis renders here, off-screen
   for (const s of sessions) { const { sum, stats } = renderDebrief(s, scratch); record(s, sum, stats); }
   showFile();
+  const note = document.createElement('p');
+  note.className = skipped.length ? 'warn' : 'hint';
+  note.textContent = `Imported ${sessions.length} session${sessions.length === 1 ? '' : 's'}${warmups.length ? ` and ${warmups.length} warm-ups` : ''}.`
+    + (skipped.length ? ` Skipped (not SENSINT files): ${skipped.join(', ')}.` : '');
+  $('debrief').prepend(note);
 }
 
 async function exportAll(button: HTMLElement) {
@@ -252,9 +265,9 @@ $('debrief').addEventListener('click', async (e) => {
 });
 $('debrief').addEventListener('change', (e) => {
   const input = e.target as HTMLInputElement;
-  const file = input.matches('[data-import]') ? input.files?.[0] : undefined;
+  const files = input.matches('[data-import]') ? [...(input.files ?? [])] : [];
   input.value = '';
-  if (file) importFile(file).catch(fail);
+  if (files.length) importFiles(files).catch(fail);
 });
 $('history').addEventListener('click', showFile);
 $('mine-open').addEventListener('click', showFile);
@@ -380,7 +393,8 @@ $('export').addEventListener('click', () => {
 });
 
 $<HTMLInputElement>('open').addEventListener('change', async (e) => {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  (e.target as HTMLInputElement).value = '';
-  if (file) await importFile(file).catch(fail);
+  const input = e.target as HTMLInputElement;
+  const files = [...(input.files ?? [])];
+  input.value = '';
+  if (files.length) await importFiles(files).catch(fail);
 });

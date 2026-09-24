@@ -63,7 +63,7 @@ export type HistoryEntry = { id: string; date: string; game: string; kind: 'hip'
 /** Your sessions next to this one: verdicts, ranges, session-wide averages, and backup controls. */
 export function renderHistory(entries: HistoryEntry[], currentId: string) {
   const tools = `<p class="history-tools"><button type="button" class="secondary" data-export-all>Export all sessions (backup)</button>
-    <label class="file-btn secondary">Import backup <input type="file" data-import accept=".gz,.json,application/json,application/gzip" /></label></p>
+    <label class="file-btn secondary">Import backup <input type="file" multiple data-import accept=".gz,.json,application/json,application/gzip" /></label></p>
     <p class="hint">Stored only in this browser. A backup file moves them to another browser or PC, and keeps them safe if browser data is cleared.</p>`;
   if (!entries.length) return `<h3>Your sessions</h3><p class="hint">No sessions saved in this browser yet.</p>${tools}`;
   if (entries.length === 1 && entries[0].id === currentId)
