@@ -138,6 +138,6 @@ test('recorded session (Chip, 2026-09-24) analyses end to end', () => {
   // A plateau from 16.8 to 28 cm shouldn't produce a confident single number.
   expect(rec!.confidence).not.toBe('high');
   // ALPHA (16.8) and BRAVO (28.0, current) tied; the band must cover both, so the verdict is "keep".
-  expect(rec!.lo).toBeLessThanOrEqual(16.8);
+  expect(rec!.lo).toBeLessThanOrEqual(byCode.ALPHA.cm360 + 1e-9);
   expect(rec!.hi).toBeGreaterThanOrEqual(s.intake.baselineCm360 - 1e-9);
 });
