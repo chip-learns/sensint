@@ -21,8 +21,8 @@ test('angles and seeded spawns', () => {
   expect(angleBetween({ yaw: 10, pitch: 5 }, { yaw: 370, pitch: 5 })).toBeCloseTo(0, 4);
   const t1 = nextTarget({ yaw: 0, pitch: 0 }, rng(42));
   expect(nextTarget({ yaw: 0, pitch: 0 }, rng(42))).toEqual(t1);
-  expect(Math.abs(t1.yaw)).toBeGreaterThanOrEqual(20);
-  expect(Math.abs(t1.yaw)).toBeLessThanOrEqual(120);
+  expect(Math.abs(t1.yaw)).toBeGreaterThanOrEqual(15);
+  expect(Math.abs(t1.yaw)).toBeLessThanOrEqual(45);
 });
 
 test('strafe path is seeded, bounded and continuous', () => {

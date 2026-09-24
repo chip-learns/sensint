@@ -1,7 +1,7 @@
 import { angleBetween, nextTarget, type Aim } from '../analysis/aim';
 import type { Drill, DrillName } from './stage';
 
-/** Flick: one small target at a time, 20–120° away. */
+/** Flick: one small target at a time, 15–45° away, always on-screen. */
 export const flick = (durationMs = 30_000): Drill => ({
   name: 'flick', durationMs, radiusDeg: 0.9,
   start: (c, t) => c.place(t, nextTarget(c.aim, c.rand)),
