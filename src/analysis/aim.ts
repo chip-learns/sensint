@@ -36,9 +36,10 @@ export function applyMove(aim: Aim, m: { dx: number; dy: number }, k: number) {
 
 /**
  * Next target min–max° away horizontally, small vertical offset.
- * Default 15–45° keeps it on-screen (half-FOV ~53°): off-screen spawns measured search, not flick.
+ * Default 5–35° keeps it on-screen (half-FOV ~53°) and includes small flicks;
+ * off-screen spawns measured search, not flick.
  */
-export function nextTarget(aim: Aim, rand: () => number, min = 15, max = 45): Aim {
+export function nextTarget(aim: Aim, rand: () => number, min = 5, max = 35): Aim {
   const side = rand() < 0.5 ? -1 : 1;
   return { yaw: aim.yaw + side * (min + rand() * (max - min)), pitch: -15 + rand() * 30 };
 }
