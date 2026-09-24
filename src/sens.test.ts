@@ -3,7 +3,7 @@ import { gunzipSync } from 'node:zlib';
 import { expect, test } from 'vitest';
 import games from '../data/games.json';
 import { angleBetween, applyMove, nextTarget, rng } from './analysis/aim';
-import { analyze, doorStats, fitQuadratic, flicks, recommend, trackStats } from './analysis/score';
+import { analyze, doorStats, fitQuadratic, flicks, level, recommend, trackStats } from './analysis/score';
 import { adsFovH, aimingForRedDot, cm360FromGame, degPerCount, gameSensFromCm360, redDotCm360 } from './analysis/sens';
 import { doorway, DRILLS, nudge, pan, strafe } from './drills';
 import type { DrillLog } from './drills/stage';
@@ -317,4 +317,29 @@ test('a repeat session with the same candidates combines with the earlier one; o
   const other = { ...s1, intake: { ...s1.intake, game: 'cs2' } };
   expect(renderDebrief(s2, el, [other]).sum.n).toBeUndefined();
   expect((await decode(await encode(both))).n).toBe(2); // survives a share link
+});
+
+test('follow-up sessions: level() puts each session on one scale, and the debrief combines them', () => {
+  // True curve peaks at 26 cm. Session 0 tested around 30 cm; the follow-up (set 1) around 24 cm, and
+  // both average 50 on their own, so session 0 sits 15 points lower than the shared curve says.
+  const truth = (cm: number) => 80 - 40 * (Math.log(cm) - Math.log(26)) ** 2;
+  const pts = [
+    ...[18, 23.1, 30, 38.1, 48].map((cm, i) => ({ code: 'ABCDE'[i], cm360: cm, score: truth(cm) - 15, set: 0 })),
+    ...[14.4, 18.3, 24, 30.5, 38.4].map((cm, i) => ({ code: 'FGHIJ'[i], cm360: cm, score: truth(cm), set: 1 })),
+  ];
+  const lv = level(pts);
+  for (const [i, p] of lv.entries()) expect(p.score).toBeCloseTo(truth(pts[i].cm360), 6); // offset found and removed
+  expect(recommend(lv)!.cm360).toBeCloseTo(26, 6);
+  expect(level(pts.slice(0, 5))).toEqual(pts.slice(0, 5)); // one session: untouched
+
+  const s1 = JSON.parse(gunzipSync(readFileSync('tests/fixtures/session-625932.json.gz')).toString()) as Session;
+  const later = new Date(Date.parse(s1.createdAt) + 864e5).toISOString();
+  const slower = (c: { cm360: number }) => ({ ...c, cm360: c.cm360 * 1.2 }); // follow-up centred 20% slower
+  const s2: Session = { ...s1, createdAt: later, candidates: s1.candidates.map(slower), trials: s1.trials.map(slower) };
+  const el = { innerHTML: '' } as HTMLElement;
+  const sum = renderDebrief(s2, el, [s1]).sum;
+  expect(sum.n).toBe(2);
+  expect(sum.c.filter(([code]) => code === 'PRIOR').length).toBeGreaterThan(0); // earlier-only sensitivities listed
+  const far = { ...s1, candidates: s1.candidates.map((c) => ({ ...c, cm360: c.cm360 * 5 })) }; // no overlap: not combined
+  expect(renderDebrief(s2, el, [far]).sum.n).toBeUndefined();
 });

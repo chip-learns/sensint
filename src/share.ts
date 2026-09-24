@@ -34,7 +34,7 @@ function validate(o: any): Summary {
   if (o?.v !== 1) bad('version');
   if (!(typeof o.game === 'string' && Object.hasOwn(games, o.game))) bad('game');
   if (!(typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date))) bad('date');
-  if (!Array.isArray(o.c) || o.c.length > 12) bad('candidates');
+  if (!Array.isArray(o.c) || o.c.length > 60) bad('candidates'); // combined sessions add earlier candidates
   const r = o.rec;
   const sens = (x: unknown) => num(x, 0.001, 10, 'sensitivity');
   return {

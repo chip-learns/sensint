@@ -183,7 +183,27 @@ export function fitQuadratic(xs: number[], ys: number[]): [number, number, numbe
   return [a, b, c];
 }
 
-export type Point = { code: string; cm360: number; score: number };
+export type Point = { code: string; cm360: number; score: number; set?: number }; // set: which pooled session
+
+/**
+ * Every session averages 50, so a follow-up of faster candidates isn't on the same scale as the session
+ * before it. Fit one curve with a per-session offset (alternate: fit the curve, then set each offset to
+ * that session's mean gap from it) and move each session onto the last one's scale.
+ * ponytail: offsets are fitted once, not per bootstrap resample, so the band is a little optimistic
+ */
+export function level(points: Point[]): Point[] {
+  const sets = [...new Set(points.map((p) => p.set ?? 0))];
+  if (sets.length < 2) return points;
+  const xs = points.map((p) => Math.log(p.cm360));
+  const off = new Map(sets.map((s) => [s, 0]));
+  for (let i = 0; i < 100; i++) {
+    const [a, b, c] = fitQuadratic(xs, points.map((p) => p.score - off.get(p.set ?? 0)!));
+    const gap = points.map((p, j) => p.score - (a * xs[j] ** 2 + b * xs[j] + c));
+    for (const s of sets) off.set(s, mean(gap.filter((_, j) => (points[j].set ?? 0) === s)));
+  }
+  const anchor = off.get(sets.at(-1)!)!;
+  return points.map((p) => ({ ...p, score: Math.max(0, Math.min(100, p.score - off.get(p.set ?? 0)! + anchor)) }));
+}
 type Peak = { cm360: number; edge: 'fast' | 'slow' | null; coef: [number, number, number] };
 export type Recommendation = Peak & { lo: number; hi: number; confidence: 'high' | 'medium' | 'low' };
 
@@ -245,11 +265,12 @@ export type TrialIn = { code: string; cm360: number; drill: DrillName; log: Dril
 /**
  * Normalize each metric against the player's own session (z-score across that session's trials),
  * combine with game weights per candidate repeat, map to 0–100 (50 = session average).
- * Several sessions of the same candidates pool their rounds: each is normalized on its own, so a
- * better or worse day doesn't shift one session's scores against another's.
+ * Several sessions pool their rounds: each is normalized on its own, so a better or worse day doesn't
+ * shift one session's scores against another's, then level() puts them on one scale. The last session
+ * keeps its scores as played.
  */
 export function analyze(sessions: TrialIn[][], weights: Partial<Record<MetricKey, number>>) {
-  const rows = sessions.flatMap((trials) => {
+  const rows = sessions.flatMap((trials, set) => {
     const rs = trials.map((t) => ({ ...t, m: metrics(t.log) }));
     const stat = {} as Record<MetricKey, { mu: number; sd: number }>;
     for (const k of Object.keys(METRICS) as MetricKey[]) {
@@ -257,13 +278,13 @@ export function analyze(sessions: TrialIn[][], weights: Partial<Record<MetricKey
       const mu = mean(v);
       stat[k] = { mu, sd: Math.sqrt(mean(v.map((x) => (x - mu) ** 2))) };
     }
-    return rs.map((r) => ({ ...r, stat }));
+    return rs.map((r) => ({ ...r, stat, set }));
   });
-  const reps = new Map<string, { code: string; cm360: number; sum: number; w: number }>();
+  const reps = new Map<string, { code: string; cm360: number; set: number; sum: number; w: number }>();
   const seen: Record<string, number> = {};
   for (const r of rows) {
     const rep = (seen[r.code + r.drill] = (seen[r.code + r.drill] ?? -1) + 1);
-    const e = reps.get(`${r.code}#${rep}`) ?? { code: r.code, cm360: r.cm360, sum: 0, w: 0 };
+    const e = reps.get(`${r.code}#${rep}`) ?? { code: r.code, cm360: r.cm360, set: r.set, sum: 0, w: 0 };
     reps.set(`${r.code}#${rep}`, e);
     for (const [k, v] of Object.entries(r.m) as [MetricKey, number][]) {
       const w = weights[k] ?? 0;
@@ -273,9 +294,9 @@ export function analyze(sessions: TrialIn[][], weights: Partial<Record<MetricKey
       e.w += w;
     }
   }
-  const points: Point[] = [...reps.values()].map((e) => ({
-    code: e.code, cm360: e.cm360, score: Math.max(0, Math.min(100, 50 + 25 * (e.w ? e.sum / e.w : 0))),
-  }));
+  const points = level([...reps.values()].map((e) => ({
+    code: e.code, cm360: e.cm360, set: e.set, score: Math.max(0, Math.min(100, 50 + 25 * (e.w ? e.sum / e.w : 0))),
+  })));
   // Per-candidate means, for the evidence table and plain-language findings.
   const byCode: Record<string, { cm360: number; score: number; m: Metrics }> = {};
   for (const code of new Set(rows.map((r) => r.code))) {

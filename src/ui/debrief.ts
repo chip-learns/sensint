@@ -21,22 +21,29 @@ const COLUMNS: [MetricKey, string, string, number][] = [
 ];
 export type Stats = Partial<Record<MetricKey, number>>;
 
-// Same game, type and candidate sensitivities: rounds from these sessions measure the same thing and can pool.
-// ponytail: follow-ups centred elsewhere don't pool; that needs a per-session offset in the curve fit
-const setup = (s: Session) => [s.intake.game, s.intake.kind ?? 'hip', ...s.candidates.map((c) => r1(c.cm360)).sort((a, b) => a - b)].join();
+// Earlier sessions that pool into this one: same game and type, and candidates overlapping this session's
+// range (repeats and follow-ups do), so the shared curve ties their scores together.
+const range = (s: Session) => [Math.min(...s.candidates.map((c) => c.cm360)), Math.max(...s.candidates.map((c) => c.cm360))];
+const pools = (o: Session, s: Session) => o.createdAt < s.createdAt && o.candidates.length > 1
+  && o.intake.game === s.intake.game && (o.intake.kind ?? 'hip') === (s.intake.kind ?? 'hip')
+  && range(o)[0] <= range(s)[1] && range(o)[1] >= range(s)[0];
+// A sensitivity only earlier sessions tested has no code in this one; it shows as PRIOR.
+const PRIOR = '~';
+const shown = (code: string) => (code.startsWith(PRIOR) ? 'PRIOR' : code);
 
 /**
  * Renders the full subject file into el; returns its shareable summary and session-wide metric means.
- * Earlier sessions in `stored` with the same candidates are combined in, so each repeat narrows the range.
+ * Earlier repeats and follow-ups in `stored` are combined in, so each one narrows the range.
  */
 export function renderDebrief(s: Session, el: HTMLElement, stored: Session[] = []): { sum: Summary; stats: Stats } {
   const game = (s.intake.game in games ? s.intake.game : 'tarkov') as GameId;
-  const pool = s.candidates.length > 1 ? stored.filter((o) => o.createdAt < s.createdAt && setup(o) === setup(s)) : [];
+  const pool = s.candidates.length > 1 ? stored.filter((o) => pools(o, s)) : [];
   const code = new Map(s.candidates.map((c) => [r1(c.cm360), c.code])); // earlier sessions' letters → this one's
-  const sessions = [...pool, s].map((o) => o.trials.filter((t) => t.log).map((t) => ({ ...t, code: code.get(r1(t.cm360))!, log: t.log! })));
+  const sessions = [...pool, s].map((o) => o.trials.filter((t) => t.log)
+    .map((t) => ({ ...t, code: code.get(r1(t.cm360)) ?? PRIOR + r1(t.cm360), log: t.log! })));
   const logs = sessions.flat().map((t) => t.log);
   const { byCode, rec } = analyze(sessions, games[game].weights);
-  const codes = Object.entries(byCode).sort((a, b) => a[1].cm360 - b[1].cm360);
+  const codes = Object.entries(byCode).sort((a, b) => a[1].cm360 - b[1].cm360).map(([k, c]) => [shown(k), c] as [string, typeof c]);
 
   // Current sensitivity inside the band = the data can't show a change would help, so keep it.
   const ads = s.intake.kind === 'ads';
@@ -105,7 +112,7 @@ export function renderCard(s: Summary): string {
          : `Current ${fmt(s.cur)} ${unit} is outside the best range; move to ${fmt(r.final)}.`}</p>
        ${r.edge ? `<p class="warn">The best result was the ${r.edge === 'fast' ? 'fastest' : 'slowest'} candidate tested, so the true optimum
          may lie ${r.edge === 'fast' ? 'faster' : 'slower'} still. A follow-up session centred here would find it.</p>` : ''}
-       ${r.conf === 'low' ? '<p class="hint">Low confidence: several sensitivities scored within noise of each other. Another session at the same settings is combined with this one and narrows the range.</p>' : ''}`
+       ${r.conf === 'low' ? '<p class="hint">Low confidence: several sensitivities scored within noise of each other. Another session, a repeat or a follow-up, is combined with this one and narrows the range.</p>' : ''}`
     : '<p>Quick test: one candidate only, so there is no recommendation. Run a full session for a verdict.</p>';
   return `
     <div class="dossier-head">
