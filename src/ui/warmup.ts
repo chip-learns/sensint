@@ -73,8 +73,8 @@ export function renderWarmup(entry: WarmupEntry, all: WarmupEntry[], inFile = fa
     : `<div class="dossier-head"><p class="kicker">Warm-up · ${esc(entry.date)} · ${esc(g)} · ${entry.minutes} min</p>
       <h2>Pre-raid warm-up</h2></div><p>`;
   return `${head}<br>Hip ${fmt(entry.hipCm, 1)} cm/360${entry.redCm ? ` · red dot ${fmt(entry.redCm, 1)} cm/360` : ''}</p>
-    <table><thead><tr><th>Drill</th><th>Measure</th><th>${inFile ? 'Latest' : 'Today'}</th><th>Last 5</th><th></th><th>Trend</th></tr></thead>
-    <tbody>${rows.join('')}</tbody></table>
+    <div class="tbl"><table><thead><tr><th>Drill</th><th>Measure</th><th>${inFile ? 'Latest' : 'Today'}</th><th>Last 5</th><th></th><th>Trend</th></tr></thead>
+    <tbody>${rows.join('')}</tbody></table></div>
     <p class="hint">${prev.length ? `Compared with your ${Math.min(prev.length, 5) === 1 ? 'previous warm-up' : `${Math.min(prev.length, 5)} previous warm-ups`} at these settings.` : 'Your first warm-up at these settings; later ones will be compared here.'}
       Trend lines rise when you improve. Warm-ups never change your sensitivity verdicts.</p>`;
 }

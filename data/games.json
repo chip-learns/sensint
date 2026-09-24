@@ -1,6 +1,7 @@
 {
   "cs2": {
     "name": "CS2",
+    "short": "CS2",
     "yaw": 0.022,
     "verified": true,
     "source": "https://developer.valvesoftware.com/wiki/Sensitivity",
@@ -9,6 +10,7 @@
   },
   "tarkov": {
     "name": "Escape from Tarkov",
+    "short": "Tarkov",
     "yaw": 0.125,
     "verified": true,
     "source": "https://www.mouse-sensitivity.com/n/escape-from-tarkov/ ; hand-measured 2026-09-24: 600 DPI @ 0.435 predicts 28.0 cm/360, measured ~26.7 cm",
@@ -22,6 +24,7 @@
   },
   "wardogs": {
     "name": "Wardogs",
+    "short": "Wardogs",
     "yaw": null,
     "verified": false,
     "source": "Needs in-game calibration (Phase 2)",

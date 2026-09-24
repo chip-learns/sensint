@@ -42,8 +42,11 @@ export function summaryLine(game: string, dpi: number, currentSens: number) {
 }
 
 const source = (e: HistoryEntry | undefined, unit: string) => e?.rec
-  ? `${fmt(e.rec.final, 1)} ${unit} · range ${fmt(e.rec.lo, 1)}–${fmt(e.rec.hi, 1)} · ${e.rec.conf} confidence · ${e.date}`
+  ? `${fmt(e.rec.final, 1)} ${unit}, range ${fmt(e.rec.lo, 1)}–${fmt(e.rec.hi, 1)}, ${e.rec.conf} confidence, ${e.date}`
   : 'your current setting (no verdict yet)';
+// Setting name + its source underneath, value on the right.
+const row = (game: string, setting: string, value: string, from: string) =>
+  `<tr><td>${game}</td><td>${setting}<br><span class="from">${from}</span></td><td class="val">${value}</td></tr>`;
 
 export function renderFile(dpi: number, currentSens: number) {
   const entries = loadHistory();
@@ -51,23 +54,24 @@ export function renderFile(dpi: number, currentSens: number) {
   for (const id of Object.keys(games) as GameId[]) {
     const s = latestSettings(id, dpi, id === 'tarkov' ? currentSens : 0, entries);
     if (!s) continue;
-    const name = games[id].name;
-    if (s.hip?.entry) rows.push(`<tr><td>${name}</td><td>${id === 'tarkov' ? 'Mouse sensitivity' : 'Sensitivity'}</td><td><strong>${fmt(s.hip.sens, 3)}</strong></td><td>${source(s.hip.entry, 'cm/360')}</td></tr>`);
+    const name = games[id].short;
+    if (s.hip?.entry) rows.push(row(name, id === 'tarkov' ? 'Mouse sensitivity' : 'Sensitivity', fmt(s.hip.sens, 3), source(s.hip.entry, 'cm/360')));
     if (s.ads) rows.push(
-      `<tr><td>${name}</td><td>Mouse sensitivity (aiming)</td><td><strong>${fmt(s.ads.aiming, 3)}</strong></td><td>${source(s.ads.entry, 'red-dot cm/360')}${s.hip?.entry ? '' : ` · at your current hip ${fmt(s.hip!.sens, 3)}`}</td></tr>`,
-      `<tr><td>${name}</td><td>Scope zoom adjustment sensitivity</td><td><strong>1.00</strong></td><td>scopes then scale with magnification</td></tr>`,
+      row(name, 'Mouse sensitivity (aiming)', fmt(s.ads.aiming, 3),
+        source(s.ads.entry, 'red-dot cm/360') + (s.hip?.entry ? '' : `, at your current hip ${fmt(s.hip!.sens, 3)}`)),
+      row(name, 'Scope zoom adjustment sensitivity', '1.00', 'scopes then scale with magnification'),
     );
   }
   // Same feel in CS2 as your Tarkov hip verdict, if CS2 has no verdict of its own.
   const tk = latestSettings('tarkov', dpi, 0, entries);
   if (tk?.hip?.entry && !latestSettings('cs2', dpi, 0, entries)) rows.push(
-    `<tr><td>CS2</td><td>Sensitivity</td><td><strong>${fmt(gameSensFromCm360(tk.hip.cm, dpi, games.cs2.yaw), 2)}</strong></td><td>same ${fmt(tk.hip.cm, 1)} cm/360 as your Tarkov hip verdict</td></tr>`);
+    row('CS2', 'Sensitivity', fmt(gameSensFromCm360(tk.hip.cm, dpi, games.cs2.yaw), 2), `same ${fmt(tk.hip.cm, 1)} cm/360 as your Tarkov hip verdict`));
 
   const warmups = loadWarmups();
   const latest = warmups.at(-1);
   return `<div class="dossier-head"><p class="kicker">Subject file · all sessions saved in this browser</p><h2>My file</h2></div>
     <h3>Current settings</h3>
-    ${rows.length ? `<table><tbody>${rows.join('')}</tbody></table>
+    ${rows.length ? `<div class="tbl"><table class="settings"><tbody>${rows.join('')}</tbody></table></div>
       <p class="hint">At ${dpi} DPI, from your latest verdict of each kind. Open a session below for its evidence.</p>`
       : '<p class="hint">No verdicts yet. Run a hip or red-dot session, or open saved sessions, and your settings will appear here.</p>'}
     <h3>Warm-up progress</h3>

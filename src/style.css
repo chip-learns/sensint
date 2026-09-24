@@ -69,6 +69,14 @@ body[data-cue="right"] #cue { right: 24px; border-left: 56px solid #ff2a1acc; }
 .history-tools { display: flex; flex-wrap: wrap; gap: .5rem; }
 .history-tools .file-btn { display: inline-block; }
 button.link { padding: 0 .3rem; background: none; border: none; color: var(--red); text-decoration: underline; text-transform: none; }
+/* Results tables: scroll sideways inside the page rather than spill past its edge. */
+.tbl { overflow-x: auto; margin: 0 0 .5rem; }
+table.sessions td, table.sessions th { white-space: nowrap; text-align: left; }
+#result button.link { margin: 0; vertical-align: baseline; }
+table.settings td { text-align: left; vertical-align: top; }
+table.settings td:first-child { white-space: nowrap; font-weight: bold; }
+table.settings td.val { text-align: right; font-weight: bold; font-size: 1.05rem; white-space: nowrap; }
+.from { color: var(--muted); font-size: .75rem; }
 .mine { margin: 0; padding: .5rem .6rem; border-left: 3px solid var(--red); background: #f6f1e3; font-size: .85rem; }
 .spark polyline { fill: none; stroke: var(--ink); stroke-width: 1.5; }
 .spark circle { fill: var(--red); }

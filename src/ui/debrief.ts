@@ -47,10 +47,10 @@ export function renderDebrief(s: Session, el: HTMLElement): { sum: Summary; stat
   const stats: Stats = Object.fromEntries(cols.map(([k]) =>
     [k, codes.reduce((a, [, c]) => a + (c.m[k] ?? 0), 0) / codes.filter(([, c]) => Number.isFinite(c.m[k])).length]));
   el.innerHTML = renderCard(sum) + (ads ? '' : padCheck(s.intake.padCm, sum.rec?.final)) + `
-    <table><thead><tr><th>Code</th><th>cm/360</th><th>Score</th>${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>
+    <div class="tbl"><table><thead><tr><th>Code</th><th>cm/360</th><th>Score</th>${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>
     ${codes.map(([code, c]) => `<tr${sum.rec && r1(c.cm360) === sum.rec.final ? ' class="best"' : ''}><td>${esc(code)}</td><td>${fmt(c.cm360)}</td><td>${fmt(c.score, 0)}</td>
       ${cols.map(([k, , unit, d]) => `<td>${fmt(c.m[k], d)}${unit}</td>`).join('')}</tr>`).join('')}
-    </tbody></table>
+    </tbody></table></div>
     <h3>Findings</h3>
     <ul>${findings(codes).map((f) => `<li>${f}</li>`).join('')}</ul>
     <p class="hint">Data quality: ${raw ? 'raw input on every trial' : '<span class="warn">some trials without raw input</span>'} ·
@@ -60,7 +60,7 @@ export function renderDebrief(s: Session, el: HTMLElement): { sum: Summary; stat
 
 export type HistoryEntry = { id: string; date: string; game: string; kind: 'hip' | 'ads'; rec: Summary['rec']; cur: number; stats: Stats };
 
-/** Your sessions next to this one: verdicts, ranges, session-wide averages, and backup controls. */
+/** Your sessions next to this one: verdicts, ranges, confidence, and backup controls. */
 export function renderHistory(entries: HistoryEntry[], currentId: string) {
   const tools = `<p class="history-tools"><button type="button" class="secondary" data-export-all>Export all sessions (backup)</button>
     <label class="file-btn secondary">Import backup <input type="file" multiple data-import accept=".gz,.json,application/json,application/gzip" /></label></p>
@@ -68,16 +68,14 @@ export function renderHistory(entries: HistoryEntry[], currentId: string) {
   if (!entries.length) return `<h3>Your sessions</h3><p class="hint">No sessions saved in this browser yet.</p>${tools}`;
   if (entries.length === 1 && entries[0].id === currentId)
     return `<h3>Your sessions</h3><p class="hint">This is your first saved session; later ones will be compared here.</p>${tools}`;
-  const cols = COLUMNS.filter(([k]) => entries.some((e) => Number.isFinite(e.stats[k])));
-  return `<h3>Your sessions</h3><table><thead><tr><th>Date</th><th>Type</th><th>Current</th><th>Verdict</th><th>Range</th><th>Conf.</th>
-    ${cols.map(([, label]) => `<th>${label}</th>`).join('')}<th></th></tr></thead><tbody>
+  // Six columns keep it inside the page; each session's full numbers are one click away (Open).
+  return `<h3>Your sessions</h3><div class="tbl"><table class="sessions"><thead><tr><th>Date</th><th>Type</th><th>Verdict</th><th>Range</th><th>Confidence</th><th></th></tr></thead><tbody>
     ${[...entries].reverse().map((e) => `<tr${e.id === currentId ? ' class="best"' : ''}><td>${esc(e.date)}</td>
-      <td>${esc(games[e.game as GameId]?.name ?? e.game)} ${e.kind === 'ads' ? 'red dot' : 'hip'}</td><td>${fmt(e.cur)}</td>
-      <td>${e.rec ? fmt(e.rec.final) : '—'}</td><td>${e.rec ? `${fmt(e.rec.lo)}–${fmt(e.rec.hi)}` : '—'}</td><td>${e.rec ? esc(e.rec.conf) : '—'}</td>
-      ${cols.map(([k, , unit, d]) => `<td>${fmt(e.stats[k], d)}${Number.isFinite(e.stats[k]) ? unit : ''}</td>`).join('')}
-      <td>${e.id === currentId ? '' : `<button type="button" class="link" data-open="${esc(e.id)}">Open</button>`}</td></tr>`).join('')}
-    </tbody></table>
-    <p class="hint">Newest first. Averages cover all candidates in each session, so sessions centred on different sensitivities aren't strictly comparable.</p>
+      <td>${esc(games[e.game as GameId]?.short ?? e.game)} ${e.kind === 'ads' ? 'red dot' : 'hip'}</td>
+      <td>${e.rec ? `${fmt(e.rec.final)} cm` : '—'}</td><td>${e.rec ? `${fmt(e.rec.lo)}–${fmt(e.rec.hi)}` : '—'}</td><td>${e.rec ? esc(e.rec.conf) : '—'}</td>
+      <td>${e.id === currentId ? 'this one' : `<button type="button" class="link" data-open="${esc(e.id)}">Open</button>`}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="hint">Newest first. Verdicts are cm/360 (red-dot cm/360 for red-dot sessions). Open a session for its evidence and findings.</p>
     ${tools}`;
 }
 
