@@ -9,18 +9,19 @@ export const flick = (durationMs = 30_000): Drill => ({
 });
 
 /**
- * Seeded strafe path: constant-speed segments (25–50°/s) that change direction every
- * 0.25–1 s and stay within ±halfWidth° of center. Time-based, so identical at any frame rate.
+ * Seeded strafe path: constant-speed segments (15–35°/s) that change direction every
+ * 0.5–1.5 s and stay within ±halfWidth° of center. Time-based, so identical at any frame rate.
+ * Eased from 25–50°/s every 0.25–1 s after the first playtest felt twitchy.
  */
 export function strafe(rand: () => number, durationS: number, halfWidth = 35) {
   const segs: { t: number; yaw: number; vel: number }[] = [];
   let t = 0, yaw = 0;
   while (t < durationS) {
-    const speed = 25 + rand() * 25;
+    const speed = 15 + rand() * 20;
     let side = rand() < 0.5 ? -1 : 1;
     if ((side > 0 ? halfWidth - yaw : yaw + halfWidth) < 10) side = -side;
     const room = side > 0 ? halfWidth - yaw : yaw + halfWidth;
-    const dur = Math.min(0.25 + rand() * 0.75, room / speed);
+    const dur = Math.min(0.5 + rand(), room / speed);
     segs.push({ t, yaw, vel: side * speed });
     yaw += side * speed * dur;
     t += dur;
@@ -36,7 +37,7 @@ export function strafe(rand: () => number, durationS: number, halfWidth = 35) {
 export const track = (durationMs = 15_000): Drill => {
   let yawAt = (_: number) => 0;
   return {
-    name: 'track', durationMs, radiusDeg: 1.5, highlight: true,
+    name: 'track', durationMs, radiusDeg: 2, highlight: true,
     start: (c, t) => { yawAt = strafe(c.rand, durationMs / 1000); c.place(t, { yaw: 0, pitch: 0 }); },
     frame: (c, t) => c.place(t, { yaw: yawAt(t / 1000), pitch: 0 }, 'path'),
   };

@@ -1,6 +1,4 @@
 // Pure aim math shared by the drills (live) and analysis (replay). No DOM, no Three.js.
-import type { DrillLog } from '../drills/stage';
-import { degPerCount } from './sens';
 
 const RAD = Math.PI / 180;
 
@@ -42,17 +40,4 @@ export function applyMove(aim: Aim, m: { dx: number; dy: number }, k: number) {
 export function nextTarget(aim: Aim, rand: () => number, min = 5, max = 35): Aim {
   const side = rand() < 0.5 ? -1 : 1;
   return { yaw: aim.yaw + side * (min + rand() * (max - min)), pitch: -15 + rand() * 30 };
-}
-
-/** Track drill: % of rendered frames with the crosshair on the target, replayed from raw moves. */
-export function onTargetPct(log: DrillLog) {
-  // ponytail: per-frame, not per-ms; frames are near-uniform. Weight by frame dt if refresh rates vary mid-run.
-  const k = degPerCount(log.cm360, log.dpi);
-  const aim: Aim = { yaw: 0, pitch: 0 };
-  let i = 0, on = 0;
-  for (const p of log.path) {
-    while (i < log.moves.length && log.moves[i].t <= p.t) applyMove(aim, log.moves[i++], k);
-    if (angleBetween(aim, p) <= log.targetRadiusDeg) on++;
-  }
-  return log.path.length ? (100 * on) / log.path.length : 0;
 }

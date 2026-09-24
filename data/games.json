@@ -3,18 +3,21 @@
     "name": "CS2",
     "yaw": 0.022,
     "verified": true,
-    "source": "https://developer.valvesoftware.com/wiki/Sensitivity"
+    "source": "https://developer.valvesoftware.com/wiki/Sensitivity",
+    "weights": { "flickHits": 2, "flickTTT": 1.5, "flickOvershoot": 1, "trackOn": 0.5, "trackErr": 0.5, "microHits": 1, "microCorr": 1 }
   },
   "tarkov": {
     "name": "Escape from Tarkov",
     "yaw": 0.125,
     "verified": true,
-    "source": "https://www.mouse-sensitivity.com/n/escape-from-tarkov/ ; hand-measured 2026-09-24: 600 DPI @ 0.435 predicts 28.0 cm/360, measured ~26.7 cm"
+    "source": "https://www.mouse-sensitivity.com/n/escape-from-tarkov/ ; hand-measured 2026-09-24: 600 DPI @ 0.435 predicts 28.0 cm/360, measured ~26.7 cm",
+    "weights": { "flickHits": 1, "flickTTT": 0.5, "flickOvershoot": 1, "trackOn": 1.5, "trackErr": 1, "microHits": 1, "microCorr": 1.5 }
   },
   "wardogs": {
     "name": "Wardogs",
     "yaw": null,
     "verified": false,
-    "source": "Needs in-game calibration (Phase 2)"
+    "source": "Needs in-game calibration (Phase 2)",
+    "weights": { "flickHits": 1, "flickTTT": 1, "flickOvershoot": 1, "trackOn": 1.5, "trackErr": 1.5, "microHits": 1, "microCorr": 1 }
   }
 }

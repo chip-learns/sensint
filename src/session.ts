@@ -3,7 +3,18 @@ export const CODE_NAMES = ['ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO'];
 // Roughly geometric spread around the baseline, per the design doc (0.6× to 1.6×).
 export const MULTIPLIERS = [0.6, 0.77, 1, 1.27, 1.6];
 
+import type { DrillLog, DrillName } from './drills/stage';
+
 export type Candidate = { code: string; cm360: number };
+export type Trial = Candidate & { drill: DrillName; log?: DrillLog };
+export type Intake = {
+  dpi: number; game: string; sens: number; aimingSens: number | null;
+  padCm: number | null; seed: number; baselineCm360: number; codeName?: string;
+};
+export type Session = {
+  app: 'sensint'; version: 1; createdAt: string; intake: Intake;
+  candidates: Candidate[]; warmup: DrillLog | null; trials: Trial[];
+};
 
 export function shuffle<T>(xs: T[], rand: () => number): T[] {
   const a = [...xs];

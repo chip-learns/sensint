@@ -22,9 +22,11 @@
       <label>Mousepad width, cm (optional) <input name="pad" type="number" step="any" min="0" /></label>
       <p class="field">Baseline <output name="cm360">—</output> cm/360</p>
       <p id="warn" class="warn" hidden></p>
+      <label>Code name (optional) <input name="codename" maxlength="24" placeholder="SUBJECT" autocomplete="off" /></label>
       <label>Seed <input name="seed" type="number" /></label>
       <button type="submit">Begin session (~15 min)</button>
       <button id="quick" type="button" class="secondary">Quick Flick test (30 s)</button>
+      <label class="file-btn secondary">Open saved session <input id="open" type="file" accept=".json,application/json" /></label>
       <p class="hint">Chrome or Edge recommended for raw input. Esc aborts a trial; it restarts from the beginning.</p>
     </form>
 
@@ -36,10 +38,9 @@
     </section>
 
     <section id="result" hidden>
-      <h2>Field report</h2>
-      <p class="hint">Raw counts, unscored. Scoring and the recommendation land in Phase 1c.</p>
-      <div id="summary"></div>
+      <div id="debrief"></div>
       <button id="export" type="button">Export session JSON</button>
+      <button id="follow" type="button" class="secondary">Follow-up session centred here</button>
       <button id="again" type="button" class="secondary">New session</button>
     </section>
   </main>

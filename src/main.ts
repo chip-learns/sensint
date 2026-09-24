@@ -1,12 +1,12 @@
 import games from '../data/games.json';
-import { onTargetPct, rng } from './analysis/aim';
-import { cm360FromGame } from './analysis/sens';
+import { rng } from './analysis/aim';
+import { cm360FromGame, gameSensFromCm360 } from './analysis/sens';
 import { DRILLS, flick } from './drills';
-import { runDrill, type Drill, type DrillLog, type DrillName } from './drills/stage';
-import { candidates, schedule, type Candidate } from './session';
+import { runDrill, type Drill, type DrillName } from './drills/stage';
+import { candidates, schedule, type Intake, type Session, type Trial } from './session';
+import { renderDebrief } from './ui/debrief';
 
 type GameId = keyof typeof games;
-type Trial = Candidate & { drill: DrillName; log?: DrillLog };
 
 // ponytail: fixed CS2 hip FOV (106.26° at 16:9); per-game FOV matching lands in Phase 2
 const FOV_H = 106.26;
@@ -20,7 +20,8 @@ for (const [id, g] of Object.entries(games)) {
   f.game.add(new Option(g.yaw ? g.name : `${g.name} (needs calibration)`, id, false, id === 'tarkov'));
   if (!g.yaw) f.game.options[f.game.length - 1].disabled = true;
 }
-f.seed.value = String(Math.floor(Math.random() * 1e6));
+const newSeed = () => (f.seed.value = String(Math.floor(Math.random() * 1e6)));
+newSeed();
 
 const baseline = () => {
   const g = games[f.game.value as GameId];
@@ -62,17 +63,18 @@ async function play(kicker: string, title: string, text: string, cm360: number, 
   }
 }
 
-let last: object | undefined;
+let last: Session | undefined;
 
 async function session(quick: boolean) {
   const cm = baseline();
   if (!Number.isFinite(cm) || !form.reportValidity()) return;
   const seed = +f.seed.value;
   const rand = rng(seed);
-  const intake = {
+  const intake: Intake = {
     dpi: +f.dpi.value, game: f.game.value, sens: +f.sens.value,
     aimingSens: f.game.value === 'tarkov' && f.aiming.value ? +f.aiming.value : null,
     padCm: f.pad.value ? +f.pad.value : null, seed, baselineCm360: cm,
+    codeName: f.codename.value.trim().slice(0, 24) || undefined,
   };
   const cands = quick ? [{ code: 'BASELINE', cm360: cm }] : candidates(cm, rand);
   const plan: Trial[] = quick
@@ -87,8 +89,7 @@ async function session(quick: boolean) {
       const d = DRILLS[t.drill];
       t.log = await play(`Trial ${i + 1} of ${plan.length}`, `Candidate ${t.code} · ${d.label}`, d.brief, t.cm360, d.make, seed + i + 1);
     }
-    last = { app: 'sensint', version: 1, createdAt: new Date().toISOString(), intake, candidates: cands, warmup, trials: plan };
-    report(cands, plan);
+    debrief({ app: 'sensint', version: 1, createdAt: new Date().toISOString(), intake, candidates: cands, warmup, trials: plan });
   } catch (e) {
     show('form', 'Intake form');
     $('warn').hidden = false;
@@ -96,33 +97,51 @@ async function session(quick: boolean) {
   }
 }
 
-function report(cands: Candidate[], plan: Trial[]) {
-  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b) / xs.length : NaN);
-  const fmt = (x: number, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : '—');
-  const hits = (l: DrillLog) => l.shots.filter((s) => s.hit).length;
-  const rows = [...cands].sort((a, b) => a.cm360 - b.cm360).map((c) => {
-    const logs = (d: DrillName) => plan.filter((t) => t.code === c.code && t.drill === d).map((t) => t.log!);
-    return `<tr><td>${c.code}</td><td>${fmt(c.cm360)}</td><td>${fmt(mean(logs('flick').map(hits)))}</td>`
-      + `<td>${fmt(mean(logs('track').map(onTargetPct)))}</td><td>${fmt(mean(logs('micro').map(hits)))}</td></tr>`;
-  });
-  const flagged = plan.some((t) => !t.log!.rawInput);
-  const dts = plan.flatMap((t) => t.log!.moves.slice(1).map((m, i) => m.t - t.log!.moves[i].t)).sort((a, b) => a - b);
-  const hz = 1000 / dts[dts.length >> 1];
-  $('summary').innerHTML = `<table><thead><tr><th>Code</th><th>cm/360</th><th>Flick hits</th><th>Track % on</th><th>Micro hits</th></tr></thead>`
-    + `<tbody>${rows.join('')}</tbody></table>`
-    + `<p class="hint">Mouse report rate recorded: ~${fmt(hz, 0)} Hz via ${plan[0].log!.input.event}</p>`
-    + (flagged ? '<p class="warn">Raw input was not available for some trials; those measurements include OS acceleration.</p>' : '');
-  show('result', 'Field report');
+let followUp: number | null = null;
+
+function debrief(s: Session) {
+  last = s;
+  const rec = renderDebrief(s, $('debrief'));
+  followUp = rec?.cm360 ?? null;
+  $('follow').hidden = followUp === null;
+  show('result', 'Debrief');
 }
 
 form.addEventListener('submit', (e) => { e.preventDefault(); session(false); });
 $('quick').addEventListener('click', () => session(true));
-$('again').addEventListener('click', () => show('form', 'Intake form'));
+$('again').addEventListener('click', () => { newSeed(); show('form', 'Intake form'); });
+
+// Centre a new session on the verdict: set the in-game sensitivity that equals it.
+$('follow').addEventListener('click', () => {
+  const s = last!, g = games[s.intake.game as GameId];
+  if (followUp === null || !g?.yaw) return;
+  f.dpi.value = String(s.intake.dpi);
+  f.game.value = s.intake.game;
+  f.sens.value = gameSensFromCm360(followUp, s.intake.dpi, g.yaw).toFixed(3);
+  newSeed();
+  baseline();
+  show('form', 'Intake form');
+});
+
 $('export').addEventListener('click', () => {
   if (!last) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(last)], { type: 'application/json' }));
-  a.download = `sensint-session-${f.seed.value}.json`;
+  a.download = `sensint-session-${last.intake.seed}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
+});
+
+$<HTMLInputElement>('open').addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  (e.target as HTMLInputElement).value = '';
+  if (!file) return;
+  try {
+    const s = JSON.parse(await file.text()) as Session;
+    if (s?.app !== 'sensint' || !Array.isArray(s.trials)) throw new Error('not a SENSINT session file');
+    debrief(s);
+  } catch (err) {
+    $('warn').hidden = false;
+    $('warn').textContent = `Could not open that file: ${(err as Error).message}`;
+  }
 });

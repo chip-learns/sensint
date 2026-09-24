@@ -32,6 +32,21 @@ table { width: 100%; border-collapse: collapse; font-size: .85rem; }
 th, td { text-align: right; padding: .35rem .4rem; border-bottom: 1px solid #0003; }
 th:first-child, td:first-child { text-align: left; }
 th { text-transform: uppercase; font-size: .7rem; color: var(--muted); }
+.file-btn { display: block; text-align: center; padding: .45rem; border: 1px solid var(--ink); cursor: pointer; font-size: 1rem; }
+.file-btn input { display: none; }
+h3 { margin: 1.6rem 0 .5rem; padding-bottom: .2rem; border-bottom: 1px solid var(--ink); text-transform: uppercase; font-size: .85rem; letter-spacing: .1em; }
+.dossier-head h2 { margin: .2rem 0 0; font-size: 1.8rem; letter-spacing: .15em; }
+.big { font-size: 2.6rem; font-weight: bold; margin: .2rem 0; }
+.big small { font-size: 1rem; color: var(--muted); }
+tr.best td { background: #d8cfa8; font-weight: bold; }
+#debrief ul { padding-left: 1.2rem; font-size: .85rem; }
+.chart { width: 100%; height: auto; font-size: 10px; fill: var(--muted); }
+.chart circle { fill: var(--red); }
+.chart .fit { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.chart .verdict { stroke: var(--red); stroke-dasharray: 4 3; }
+.chart .grid { stroke: #0002; }
+.chart .code { font-weight: bold; fill: var(--ink); }
+.file:has(#result:not([hidden])) { max-width: 44rem; }
 .field output { font-weight: bold; font-size: 1.2rem; }
 .warn { color: var(--red); font-size: .85rem; }
 .hint { color: var(--muted); font-size: .8rem; margin: 0; }
