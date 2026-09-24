@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { angleBetween, applyMove, dir, rng, type Aim } from '../analysis/aim';
 import { degPerCount } from '../analysis/sens';
-import { lockPointer, onMove, type Move } from '../input/pointer';
+import { lockPointer, MOVE_EVENT, onMove, type Move } from '../input/pointer';
 
 const RAD = Math.PI / 180;
 const DIST = 10; // target distance, world units; only angles matter
@@ -12,6 +12,7 @@ export type Spawn = Mark & { nudge?: true };
 export type Shot = Mark & { hit: boolean };
 export type DrillLog = {
   drill: DrillName; seed: number; cm360: number; dpi: number; rawInput: boolean;
+  input: { event: string; userAgent: string };
   fovH: number; targetRadiusDeg: number; durationMs: number; aborted: boolean;
   moves: Move[]; spawns: Spawn[]; shots: Shot[]; path: Mark[];
 };
@@ -58,6 +59,7 @@ export async function runDrill(
   const target: Aim = { yaw: 0, pitch: 0 };
   const log: DrillLog = {
     drill: drill.name, seed: opts.seed, cm360: opts.cm360, dpi: opts.dpi, rawInput,
+    input: { event: MOVE_EVENT, userAgent: navigator.userAgent },
     fovH: opts.fovH, targetRadiusDeg: drill.radiusDeg, durationMs: drill.durationMs, aborted: false,
     moves: [], spawns: [], shots: [], path: [],
   };

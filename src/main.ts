@@ -106,8 +106,11 @@ function report(cands: Candidate[], plan: Trial[]) {
       + `<td>${fmt(mean(logs('track').map(onTargetPct)))}</td><td>${fmt(mean(logs('micro').map(hits)))}</td></tr>`;
   });
   const flagged = plan.some((t) => !t.log!.rawInput);
+  const dts = plan.flatMap((t) => t.log!.moves.slice(1).map((m, i) => m.t - t.log!.moves[i].t)).sort((a, b) => a - b);
+  const hz = 1000 / dts[dts.length >> 1];
   $('summary').innerHTML = `<table><thead><tr><th>Code</th><th>cm/360</th><th>Flick hits</th><th>Track % on</th><th>Micro hits</th></tr></thead>`
     + `<tbody>${rows.join('')}</tbody></table>`
+    + `<p class="hint">Mouse report rate recorded: ~${fmt(hz, 0)} Hz via ${plan[0].log!.input.event}</p>`
     + (flagged ? '<p class="warn">Raw input was not available for some trials; those measurements include OS acceleration.</p>' : '');
   show('result', 'Field report');
 }
