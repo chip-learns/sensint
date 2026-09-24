@@ -1,0 +1,20 @@
+{
+  "cs2": {
+    "name": "CS2",
+    "yaw": 0.022,
+    "verified": true,
+    "source": "https://developer.valvesoftware.com/wiki/Sensitivity"
+  },
+  "tarkov": {
+    "name": "Escape from Tarkov",
+    "yaw": 0.125,
+    "verified": false,
+    "source": "TODO: verify against a community reference before Phase 1c"
+  },
+  "wardogs": {
+    "name": "Wardogs",
+    "yaw": null,
+    "verified": false,
+    "source": "Needs in-game calibration (Phase 2)"
+  }
+}
