@@ -10,6 +10,7 @@ export type Trial = Candidate & { drill: DrillName; log?: DrillLog };
 export type Intake = {
   dpi: number; game: string; sens: number; aimingSens: number | null;
   padCm: number | null; seed: number; baselineCm360: number; codeName?: string;
+  rounds?: number; // absent in sessions recorded before it was configurable (they used 2)
 };
 export type Session = {
   app: 'sensint'; version: 1; createdAt: string; intake: Intake;

@@ -53,10 +53,10 @@ test('schedule: every candidate once per round, shuffled codes, no back-to-back'
   const cands = candidates(30, r);
   expect(cands.map((c) => c.code)).toEqual(['ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO']);
   expect(cands.map((c) => c.cm360).sort((x, y) => x - y)).toEqual([18, 23.1, 30, 38.1, 48]);
-  for (let s = 0; s < 50; s++) {
-    const plan = schedule(cands, 2, rng(s));
-    expect(plan).toHaveLength(10);
-    for (const c of cands) expect(plan.filter((p) => p === c)).toHaveLength(2);
+  for (const rounds of [2, 3, 4]) for (let s = 0; s < 50; s++) {
+    const plan = schedule(cands, rounds, rng(s));
+    expect(plan).toHaveLength(5 * rounds);
+    for (const c of cands) expect(plan.filter((p) => p === c)).toHaveLength(rounds);
     for (let i = 1; i < plan.length; i++) expect(plan[i]).not.toBe(plan[i - 1]);
   }
 });

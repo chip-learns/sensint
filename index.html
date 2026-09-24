@@ -23,8 +23,15 @@
       <p class="field">Baseline <output name="cm360">—</output> cm/360</p>
       <p id="warn" class="warn" hidden></p>
       <label>Code name (optional) <input name="codename" maxlength="24" placeholder="SUBJECT" autocomplete="off" /></label>
+      <label>Rounds per candidate
+        <select name="rounds">
+          <option value="2">2 (quicker, wider range)</option>
+          <option value="3" selected>3 (recommended)</option>
+          <option value="4">4 (tightest range)</option>
+        </select>
+      </label>
       <label>Seed <input name="seed" type="number" /></label>
-      <button type="submit">Begin session (~15 min)</button>
+      <button id="begin" type="submit">Begin session</button>
       <button id="quick" type="button" class="secondary">Quick Flick test (30 s)</button>
       <label class="file-btn secondary">Open saved session <input id="open" type="file" accept=".json,application/json" /></label>
       <p class="hint">Chrome or Edge recommended for raw input. Esc aborts a trial; it restarts from the beginning.</p>

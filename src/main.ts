@@ -11,7 +11,6 @@ type GameId = keyof typeof games;
 
 // ponytail: fixed CS2 hip FOV (106.26° at 16:9); per-game FOV matching lands in Phase 2
 const FOV_H = 106.26;
-const ROUNDS = 2;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
@@ -31,6 +30,8 @@ const baseline = () => {
   $('warn').hidden = g.verified;
   $('warn').textContent = `${g.name} conversion constant is unverified; treat cm/360 as approximate.`;
   $('aiming-row').hidden = f.game.value !== 'tarkov';
+  // 75 s warm-up + per round 5 candidates × (75 s of drills + ~10 s of briefings)
+  $('begin').textContent = `Begin session (~${Math.round((75 + +f.rounds.value * 5 * 85) / 60)} min)`;
   return cm;
 };
 form.addEventListener('input', baseline);
@@ -76,11 +77,12 @@ async function session(quick: boolean) {
     aimingSens: f.game.value === 'tarkov' && f.aiming.value ? +f.aiming.value : null,
     padCm: f.pad.value ? +f.pad.value : null, seed, baselineCm360: cm,
     codeName: f.codename.value.trim().slice(0, 24) || undefined,
+    rounds: quick ? 1 : +f.rounds.value,
   };
   const cands = quick ? [{ code: 'BASELINE', cm360: cm }] : candidates(cm, rand);
   const plan: Trial[] = quick
     ? [{ ...cands[0], drill: 'flick' }]
-    : schedule(cands, ROUNDS, rand).flatMap((c) => (Object.keys(DRILLS) as DrillName[]).map((drill) => ({ ...c, drill })));
+    : schedule(cands, intake.rounds!, rand).flatMap((c) => (Object.keys(DRILLS) as DrillName[]).map((drill) => ({ ...c, drill })));
 
   try {
     show('brief', quick ? 'Quick test' : 'Field trials');
