@@ -8,6 +8,7 @@ import { cm360FromGame, degPerCount, gameSensFromCm360 } from './analysis/sens';
 import { nudge, strafe } from './drills';
 import type { DrillLog } from './drills/stage';
 import { candidates, schedule, type Session } from './session';
+import { decode, encode, type Summary } from './share';
 
 test('CS2 800 DPI @ 1.2 is ~43.3 cm/360 and round-trips', () => {
   const cm = cm360FromGame(800, 1.2, 0.022);
@@ -122,6 +123,22 @@ test('quadratic fit recovers a known curve; recommend finds the peak or flags th
   expect(fast.edge).toBe('fast');
   expect(fast.cm360).toBeCloseTo(16, 9);
   expect(recommend(pts(() => 50).slice(0, 2))).toBeNull();
+});
+
+test('share link round-trips, stays short, and rejects tampering', async () => {
+  const s: Summary = {
+    v: 1, name: 'Ghost <b>', game: 'tarkov', dpi: 600, date: '2026-09-24', cur: 28, aim: 0.747,
+    rec: { final: 28, peak: 17.6, lo: 16.8, hi: 28, conf: 'low', edge: null },
+    c: [['ALPHA', 16.8, 62], ['ECHO', 21.6, 57], ['BRAVO', 28, 62], ['CHARLIE', 35.6, 36], ['DELTA', 44.8, 33]],
+  };
+  const code = await encode(s);
+  expect(code).toMatch(/^[\w-]+$/);
+  expect(code.length).toBeLessThan(400);
+  expect(await decode(code)).toEqual(s);
+  await expect(decode(await encode({ ...s, game: 'valorant' }))).rejects.toThrow('game');
+  await expect(decode(await encode({ ...s, c: [['<img>', 20, 50]] }))).rejects.toThrow('candidate');
+  await expect(decode(await encode({ ...s, cur: 1e9 }))).rejects.toThrow('cm/360');
+  await expect(decode('not!base64')).rejects.toThrow('malformed');
 });
 
 test('recorded session (Chip, 2026-09-24) analyses end to end', () => {

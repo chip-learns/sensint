@@ -4,7 +4,8 @@ import { cm360FromGame, gameSensFromCm360 } from './analysis/sens';
 import { DRILLS, flick } from './drills';
 import { runDrill, type Drill, type DrillName } from './drills/stage';
 import { candidates, schedule, type Intake, type Session, type Trial } from './session';
-import { renderDebrief } from './ui/debrief';
+import { decode, encode, type Summary } from './share';
+import { renderCard, renderDebrief } from './ui/debrief';
 
 type GameId = keyof typeof games;
 
@@ -97,23 +98,60 @@ async function session(quick: boolean) {
   }
 }
 
-let followUp: number | null = null;
+let summary: Summary | undefined;
 
+/** Own session: full debrief with export, follow-up and share. */
 function debrief(s: Session) {
   last = s;
-  const rec = renderDebrief(s, $('debrief'));
-  followUp = rec?.cm360 ?? null;
-  $('follow').hidden = followUp === null;
+  summary = renderDebrief(s, $('debrief'));
+  $('follow').hidden = !summary.rec;
+  for (const id of ['export', 'share']) $(id).hidden = false;
+  $('share-out').hidden = true;
+  $('again').textContent = 'New session';
   show('result', 'Debrief');
 }
 
+/** Someone's share link: the card only. */
+async function openLink() {
+  const code = location.hash.match(/^#c=(.+)$/)?.[1];
+  if (!code) return;
+  try {
+    $('debrief').innerHTML = renderCard(await decode(code));
+    for (const id of ['export', 'follow', 'share', 'share-out']) $(id).hidden = true;
+    $('again').textContent = 'Run your own session';
+    show('result', 'Shared subject file');
+  } catch (e) {
+    $('warn').hidden = false;
+    $('warn').textContent = `Could not read that share link (${(e as Error).message}).`;
+  }
+}
+addEventListener('hashchange', openLink);
+openLink();
+
 form.addEventListener('submit', (e) => { e.preventDefault(); session(false); });
 $('quick').addEventListener('click', () => session(true));
-$('again').addEventListener('click', () => { newSeed(); show('form', 'Intake form'); });
+$('again').addEventListener('click', () => {
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  newSeed();
+  show('form', 'Intake form');
+});
+
+$('share').addEventListener('click', async () => {
+  if (!summary) return;
+  const url = `${location.origin}${location.pathname}#c=${await encode(summary)}`;
+  const out = $<HTMLInputElement>('share-out');
+  out.value = url;
+  out.hidden = false;
+  out.select();
+  try { await navigator.clipboard.writeText(url); $('share').textContent = 'Link copied'; }
+  catch { $('share').textContent = 'Copy the link below'; }
+  setTimeout(() => ($('share').textContent = 'Copy share link'), 2500);
+});
 
 // Centre a new session on the verdict: set the in-game sensitivity that equals it.
 $('follow').addEventListener('click', () => {
   const s = last!, g = games[s.intake.game as GameId];
+  const followUp = summary?.rec?.peak ?? null;
   if (followUp === null || !g?.yaw) return;
   f.dpi.value = String(s.intake.dpi);
   f.game.value = s.intake.game;

@@ -39,9 +39,11 @@
 
     <section id="result" hidden>
       <div id="debrief"></div>
-      <button id="export" type="button">Export session JSON</button>
+      <button id="share" type="button">Copy share link</button>
+      <button id="export" type="button" class="secondary">Export session JSON</button>
       <button id="follow" type="button" class="secondary">Follow-up session centred here</button>
       <button id="again" type="button" class="secondary">New session</button>
+      <input id="share-out" readonly hidden aria-label="Share link" />
     </section>
   </main>
   <canvas id="stage" hidden></canvas>
