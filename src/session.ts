@@ -11,6 +11,8 @@ export type Intake = {
   dpi: number; game: string; sens: number; aimingSens: number | null;
   padCm: number | null; seed: number; baselineCm360: number; codeName?: string;
   rounds?: number; // absent in sessions recorded before it was configurable (they used 2)
+  kind?: 'ads'; // red-dot aiming session (Tarkov); absent = hip sensitivity
+  redDotCm360?: number; // ads only: current red-dot cm/360, the candidates' baseline
 };
 export type Session = {
   app: 'sensint'; version: 1; createdAt: string; intake: Intake;

@@ -1,6 +1,6 @@
 import games from '../data/games.json';
 import { rng } from './analysis/aim';
-import { cm360FromGame, gameSensFromCm360 } from './analysis/sens';
+import { adsFovH, aimingForRedDot, cm360FromGame, gameSensFromCm360, redDotCm360 } from './analysis/sens';
 import { DRILLS, flick } from './drills';
 import { runDrill, type Drill, type DrillName } from './drills/stage';
 import { candidates, schedule, type Intake, type Session, type Trial } from './session';
@@ -11,6 +11,7 @@ type GameId = keyof typeof games;
 
 // ponytail: fixed CS2 hip FOV (106.26° at 16:9); per-game FOV matching lands in Phase 2
 const FOV_H = 106.26;
+const K = games.tarkov.adsFactor;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
@@ -30,10 +31,17 @@ const baseline = () => {
   $('warn').hidden = g.verified;
   $('warn').textContent = `${g.name} conversion constant is unverified; treat cm/360 as approximate.`;
   $('aiming-row').hidden = f.game.value !== 'tarkov';
+  const red = redDot(cm);
+  $('reddot-row').hidden = f.kind.value !== 'ads';
+  f.reddot.value = Number.isFinite(red) ? red.toFixed(1) : '— (needs Tarkov + aiming sensitivity)';
   // 75 s warm-up + per round 5 candidates × (75 s of drills + ~10 s of briefings)
   $('begin').textContent = `Begin session (~${Math.round((75 + +f.rounds.value * 5 * 85) / 60)} min)`;
   return cm;
 };
+/** Current Tarkov red-dot cm/360 from the intake, or NaN if it can't be known. */
+function redDot(hipCm: number) {
+  return f.game.value === 'tarkov' && +f.aiming.value > 0 ? redDotCm360(hipCm, +f.sens.value, +f.aiming.value, K) : NaN;
+}
 form.addEventListener('input', baseline);
 baseline();
 
@@ -55,11 +63,11 @@ const brief = (kicker: string, title: string, text: string) =>
   });
 
 /** Brief, run, and re-run on Esc until a clean log comes back. */
-async function play(kicker: string, title: string, text: string, cm360: number, make: () => Drill, seed: number) {
+async function play(kicker: string, title: string, text: string, cm360: number, make: () => Drill, seed: number, fovH: number) {
   for (;;) {
     await brief(kicker, title, text);
     show('stage');
-    const log = await runDrill($('stage'), { cm360, dpi: +f.dpi.value, seed, fovH: FOV_H }, make());
+    const log = await runDrill($('stage'), { cm360, dpi: +f.dpi.value, seed, fovH }, make());
     if (!log.aborted) return log;
     text = 'Aborted. This trial restarts from the beginning with the same targets.';
   }
@@ -70,27 +78,40 @@ let last: Session | undefined;
 async function session(quick: boolean) {
   const cm = baseline();
   if (!Number.isFinite(cm) || !form.reportValidity()) return;
+  // Red-dot session: candidates are red-dot turn speeds, played zoomed with a red-dot reticle.
+  const ads = !quick && f.kind.value === 'ads';
+  const red = redDot(cm);
+  if (ads && !Number.isFinite(red)) {
+    $('warn').hidden = false;
+    $('warn').textContent = 'A red-dot session needs Escape from Tarkov with your aiming sensitivity filled in.';
+    return;
+  }
+  const base = ads ? red : cm;
+  const fovH = ads ? adsFovH(FOV_H, K) : FOV_H;
+  $('crosshair').classList.toggle('reddot', ads);
   const seed = +f.seed.value;
   const rand = rng(seed);
   const intake: Intake = {
+    ...(ads ? { kind: 'ads' as const, redDotCm360: red } : {}),
     dpi: +f.dpi.value, game: f.game.value, sens: +f.sens.value,
     aimingSens: f.game.value === 'tarkov' && f.aiming.value ? +f.aiming.value : null,
     padCm: f.pad.value ? +f.pad.value : null, seed, baselineCm360: cm,
     codeName: f.codename.value.trim().slice(0, 24) || undefined,
     rounds: quick ? 1 : +f.rounds.value,
   };
-  const cands = quick ? [{ code: 'BASELINE', cm360: cm }] : candidates(cm, rand);
+  const cands = quick ? [{ code: 'BASELINE', cm360: cm }] : candidates(base, rand);
   const plan: Trial[] = quick
     ? [{ ...cands[0], drill: 'flick' }]
     : schedule(cands, intake.rounds!, rand).flatMap((c) => (Object.keys(DRILLS) as DrillName[]).map((drill) => ({ ...c, drill })));
 
   try {
-    show('brief', quick ? 'Quick test' : 'Field trials');
-    const warmup = quick ? null : await play('Warm-up · not scored', 'Flick at your current sensitivity',
-      '75 s to get your hands going. Nothing here counts.', cm, () => flick(75_000), seed);
+    show('brief', quick ? 'Quick test' : ads ? 'Red-dot trials' : 'Field trials');
+    const warmup = quick ? null : await play('Warm-up · not scored', `Flick at your current ${ads ? 'red-dot ' : ''}sensitivity`,
+      `75 s to get your hands going. Nothing here counts.${ads ? ' You are aiming down a red dot for the whole session.' : ''}`,
+      base, () => flick(75_000), seed, fovH);
     for (const [i, t] of plan.entries()) {
       const d = DRILLS[t.drill];
-      t.log = await play(`Trial ${i + 1} of ${plan.length}`, `Candidate ${t.code} · ${d.label}`, d.brief, t.cm360, d.make, seed + i + 1);
+      t.log = await play(`Trial ${i + 1} of ${plan.length}`, `Candidate ${t.code} · ${d.label}${ads ? ' · red dot' : ''}`, d.brief, t.cm360, d.make, seed + i + 1, fovH);
     }
     debrief({ app: 'sensint', version: 1, createdAt: new Date().toISOString(), intake, candidates: cands, warmup, trials: plan });
   } catch (e) {
@@ -157,10 +178,17 @@ $('follow').addEventListener('click', () => {
   if (followUp === null || !g?.yaw) return;
   f.dpi.value = String(s.intake.dpi);
   f.game.value = s.intake.game;
-  const sens = gameSensFromCm360(followUp, s.intake.dpi, g.yaw);
-  f.sens.value = sens.toFixed(3);
-  // Carry the rest of the intake over; aiming keeps its ratio to hip so the debrief can still convert it.
-  f.aiming.value = s.intake.aimingSens && s.intake.sens ? ((sens * s.intake.aimingSens) / s.intake.sens).toFixed(3) : '';
+  f.kind.value = s.intake.kind ?? 'hip';
+  if (s.intake.kind === 'ads') {
+    // Red-dot follow-up: hip stays; aiming moves so the red dot sits at the peak.
+    f.sens.value = String(s.intake.sens);
+    f.aiming.value = aimingForRedDot(followUp, s.intake.baselineCm360, s.intake.sens, K).toFixed(3);
+  } else {
+    const sens = gameSensFromCm360(followUp, s.intake.dpi, g.yaw);
+    f.sens.value = sens.toFixed(3);
+    // Aiming keeps its ratio to hip so the debrief can still convert it.
+    f.aiming.value = s.intake.aimingSens && s.intake.sens ? ((sens * s.intake.aimingSens) / s.intake.sens).toFixed(3) : '';
+  }
   f.pad.value = s.intake.padCm ? String(s.intake.padCm) : '';
   f.codename.value = s.intake.codeName ?? '';
   newSeed();

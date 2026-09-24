@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import games from '../data/games.json';
 import { angleBetween, applyMove, nextTarget, rng } from './analysis/aim';
 import { analyze, fitQuadratic, flicks, recommend, trackStats } from './analysis/score';
-import { cm360FromGame, degPerCount, gameSensFromCm360 } from './analysis/sens';
+import { adsFovH, aimingForRedDot, cm360FromGame, degPerCount, gameSensFromCm360, redDotCm360 } from './analysis/sens';
 import { nudge, strafe } from './drills';
 import type { DrillLog } from './drills/stage';
 import { candidates, schedule, type Session } from './session';
@@ -14,6 +14,18 @@ test('CS2 800 DPI @ 1.2 is ~43.3 cm/360 and round-trips', () => {
   const cm = cm360FromGame(800, 1.2, 0.022);
   expect(cm).toBeCloseTo(43.3, 1);
   expect(gameSensFromCm360(cm, 800, 0.022)).toBeCloseTo(1.2, 9);
+});
+
+test('Tarkov red-dot conversion reproduces the in-game measurement and round-trips', () => {
+  const k = games.tarkov.adsFactor;
+  // Measured 2026-09-24 at 0.528 / 0.394: hip 24.0 cm, red dot 41.6 cm.
+  expect(redDotCm360(24.0, 0.528, 0.394, k)).toBeCloseTo(41.6, 0);
+  const hip = cm360FromGame(600, 0.528, games.tarkov.yaw);
+  const red = redDotCm360(hip, 0.528, 0.394, k);
+  expect(aimingForRedDot(red, hip, 0.528, k)).toBeCloseTo(0.394, 9);
+  // ADS view zoom: tan of half-FOV shrinks by k.
+  const rad = Math.PI / 360;
+  expect(Math.tan(106.26 * rad) / Math.tan(adsFovH(106.26, k) * rad)).toBeCloseTo(k, 9);
 });
 
 test('moving cm/360 worth of counts turns exactly 360°', () => {
@@ -139,6 +151,9 @@ test('share link round-trips, stays short, and rejects tampering', async () => {
   await expect(decode(await encode({ ...s, c: [['<img>', 20, 50]] }))).rejects.toThrow('candidate');
   await expect(decode(await encode({ ...s, cur: 1e9 }))).rejects.toThrow('cm/360');
   await expect(decode('not!base64')).rejects.toThrow('malformed');
+  const ads = { ...s, aim: null, ads: { hip: 0.528, aiming: 0.412 } };
+  expect(await decode(await encode(ads))).toEqual(ads);
+  await expect(decode(await encode({ ...ads, ads: { hip: 0.528, aiming: 99 } }))).rejects.toThrow('sensitivity');
 });
 
 test('pad check: 180° travel against pad width minus the mouse', async () => {

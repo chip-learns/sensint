@@ -7,6 +7,7 @@ export type Summary = {
   cur: number; aim: number | null; // current cm/360; Tarkov aiming ÷ hip ratio
   rec: { final: number; peak: number; lo: number; hi: number; conf: 'high' | 'medium' | 'low'; edge: 'fast' | 'slow' | null } | null;
   c: [code: string, cm360: number, score: number][];
+  ads?: { hip: number; aiming: number }; // red-dot session: Tarkov settings at the verdict
 };
 
 const pipe = (bytes: BlobPart, t: CompressionStream | DecompressionStream) =>
@@ -34,7 +35,9 @@ function validate(o: any): Summary {
   if (!(typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date))) bad('date');
   if (!Array.isArray(o.c) || o.c.length > 12) bad('candidates');
   const r = o.rec;
+  const sens = (x: unknown) => num(x, 0.001, 10, 'sensitivity');
   return {
+    ...(o.ads === undefined ? {} : { ads: { hip: sens(o.ads?.hip), aiming: sens(o.ads.aiming) } }),
     v: 1,
     name: typeof o.name === 'string' ? o.name.slice(0, 24) : '',
     game: o.game, date: o.date, dpi: num(o.dpi, 50, 64000, 'dpi'), cur: cm(o.cur),

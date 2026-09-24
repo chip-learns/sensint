@@ -2,7 +2,7 @@
 // Summary alone, so a share link shows the same card; the full debrief adds evidence and findings.
 import games from '../../data/games.json';
 import { analyze, fitQuadratic, median, type MetricKey } from '../analysis/score';
-import { gameSensFromCm360 } from '../analysis/sens';
+import { aimingForRedDot, gameSensFromCm360 } from '../analysis/sens';
 import type { DrillLog } from '../drills/stage';
 import type { Session } from '../session';
 import type { Summary } from '../share';
@@ -21,18 +21,21 @@ export function renderDebrief(s: Session, el: HTMLElement): Summary {
   const codes = Object.entries(byCode).sort((a, b) => a[1].cm360 - b[1].cm360);
 
   // Current sensitivity inside the band = the data can't show a change would help, so keep it.
-  const cur = s.intake.baselineCm360;
+  const ads = s.intake.kind === 'ads';
+  const cur = ads ? s.intake.redDotCm360! : s.intake.baselineCm360;
   const keep = !!rec && cur >= rec.lo && cur <= rec.hi;
+  const final = rec && (keep ? cur : rec.cm360);
   const sum: Summary = {
+    ...(ads && final ? { ads: { hip: s.intake.sens, aiming: aimingForRedDot(final, s.intake.baselineCm360, s.intake.sens, games.tarkov.adsFactor) } } : {}),
     v: 1, name: s.intake.codeName ?? '', game, dpi: s.intake.dpi, date: s.createdAt.slice(0, 10), cur: r1(cur),
-    aim: s.intake.game === 'tarkov' && s.intake.aimingSens && s.intake.sens ? s.intake.aimingSens / s.intake.sens : null,
-    rec: rec && { final: r1(keep ? cur : rec.cm360), peak: r1(rec.cm360), lo: r1(rec.lo), hi: r1(rec.hi), conf: rec.confidence, edge: rec.edge },
+    aim: !ads && s.intake.game === 'tarkov' && s.intake.aimingSens && s.intake.sens ? s.intake.aimingSens / s.intake.sens : null,
+    rec: rec && { final: r1(final!), peak: r1(rec.cm360), lo: r1(rec.lo), hi: r1(rec.hi), conf: rec.confidence, edge: rec.edge },
     c: codes.map(([code, c]) => [code, r1(c.cm360), Math.round(c.score)]),
   };
 
   const hz = 1000 / median(logs.flatMap((l) => l.moves.slice(1).map((m, i) => m.t - l.moves[i].t)));
   const raw = logs.every((l) => l.rawInput);
-  el.innerHTML = renderCard(sum) + padCheck(s.intake.padCm, sum.rec?.final) + `
+  el.innerHTML = renderCard(sum) + (ads ? '' : padCheck(s.intake.padCm, sum.rec?.final)) + `
     <table><thead><tr><th>Code</th><th>cm/360</th><th>Score</th><th>Flick hits</th><th>Flick time</th><th>Overshoot</th><th>Track on</th><th>Micro fix</th></tr></thead><tbody>
     ${codes.map(([code, c]) => `<tr${sum.rec && r1(c.cm360) === sum.rec.final ? ' class="best"' : ''}><td>${esc(code)}</td><td>${fmt(c.cm360)}</td><td>${fmt(c.score, 0)}</td>
       <td>${fmt(c.m.flickHits)}</td><td>${fmt(c.m.flickTTT, 0)} ms</td><td>${fmt(c.m.flickOvershoot)}%</td>
@@ -50,24 +53,25 @@ export function renderCard(s: Summary): string {
   const g = games[s.game as GameId];
   const r = s.rec;
   const keep = !!r && r.final === s.cur;
+  const unit = s.ads ? 'red-dot cm/360' : 'cm/360';
   const verdict = r
-    ? `<p class="big">${keep ? 'Keep ' : ''}${fmt(r.final)} <small>cm/360</small></p>
-       <p>Best range ${fmt(r.lo)}–${fmt(r.hi)} cm/360 · <strong>${esc(r.conf)} confidence</strong> · fitted peak ${fmt(r.peak)} ·
+    ? `<p class="big">${keep ? 'Keep ' : ''}${fmt(r.final)} <small>${unit}</small></p>
+       <p>Best range ${fmt(r.lo)}–${fmt(r.hi)} ${unit} · <strong>${esc(r.conf)} confidence</strong> · fitted peak ${fmt(r.peak)} ·
          weighted for ${esc(g.name)}</p>
        <p>${keep
-         ? `Current ${fmt(s.cur)} cm/360 is inside the best range: changing would not measurably help.`
-         : `Current ${fmt(s.cur)} cm/360 is outside the best range; move to ${fmt(r.final)}.`}</p>
+         ? `Current ${fmt(s.cur)} ${unit} is inside the best range: changing would not measurably help.`
+         : `Current ${fmt(s.cur)} ${unit} is outside the best range; move to ${fmt(r.final)}.`}</p>
        ${r.edge ? `<p class="warn">The best result was the ${r.edge === 'fast' ? 'fastest' : 'slowest'} candidate tested, so the true optimum
          may lie ${r.edge === 'fast' ? 'faster' : 'slower'} still. A follow-up session centred here would find it.</p>` : ''}
        ${r.conf === 'low' ? '<p class="hint">Low confidence: several sensitivities scored within noise of each other. Another session narrows the range.</p>' : ''}`
     : '<p>Quick test: one candidate only, so there is no recommendation. Run a full session for a verdict.</p>';
   return `
     <div class="dossier-head">
-      <p class="kicker">Subject file · ${esc(s.date)} · ${esc(g.name)}</p>
+      <p class="kicker">Subject file · ${esc(s.date)} · ${esc(g.name)}${s.ads ? ' · red-dot aiming' : ''}</p>
       <h2>${esc(s.name || 'SUBJECT')}</h2>
     </div>
     <h3>Verdict</h3>${verdict}
-    ${r ? settingsTable(s.dpi, r.final, s.aim) : ''}
+    ${s.ads ? adsTable(s.ads) : r ? settingsTable(s.dpi, r.final, s.aim) : ''}
     <h3>Evidence</h3>
     ${chart(s)}`;
 }
@@ -84,6 +88,15 @@ export function padCheck(padCm: number | null | undefined, cm360: number | undef
   return `<h3>Physical check</h3><p${ok ? '' : ' class="warn"'}>A 180° turn needs ${fmt(half)} cm of mouse travel;
     your ${fmt(padCm, 0)} cm pad leaves about ${fmt(room, 0)} cm of room.
     ${ok ? 'It fits in one swipe.' : 'It does not fit in one swipe; you would have to lift the mouse mid-turn.'}</p>`;
+}
+
+/** Red-dot session output: only the aiming setting changes; Tarkov scales scopes from it. */
+function adsTable(a: { hip: number; aiming: number }) {
+  return `<h3>Escape from Tarkov settings</h3><table><tbody>
+    <tr><td>Mouse sensitivity</td><td><strong>${fmt(a.hip, 3)}</strong> (unchanged)</td></tr>
+    <tr><td>Mouse sensitivity (aiming)</td><td><strong>${fmt(a.aiming, 3)}</strong></td></tr>
+    <tr><td>Scope zoom adjustment sensitivity</td><td><strong>1.00</strong> (scopes then scale with magnification)</td></tr>
+    </tbody></table>`;
 }
 
 function settingsTable(dpi: number, cm: number, aim: number | null) {

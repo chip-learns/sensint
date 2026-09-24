@@ -23,6 +23,13 @@
       <p class="field">Baseline <output name="cm360">—</output> cm/360</p>
       <p id="warn" class="warn" hidden></p>
       <label>Code name (optional) <input name="codename" maxlength="24" placeholder="SUBJECT" autocomplete="off" /></label>
+      <label>Session type
+        <select name="kind">
+          <option value="hip" selected>Hip sensitivity</option>
+          <option value="ads">Red-dot aiming (Tarkov)</option>
+        </select>
+      </label>
+      <p id="reddot-row" class="field" hidden>Red-dot baseline <output name="reddot">—</output> cm/360</p>
       <label>Rounds per candidate
         <select name="rounds">
           <option value="2">2 (quicker, wider range)</option>
