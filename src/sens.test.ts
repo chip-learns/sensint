@@ -3,9 +3,9 @@ import { gunzipSync } from 'node:zlib';
 import { expect, test } from 'vitest';
 import games from '../data/games.json';
 import { angleBetween, applyMove, nextTarget, rng } from './analysis/aim';
-import { analyze, fitQuadratic, flicks, recommend, trackStats } from './analysis/score';
+import { analyze, doorStats, fitQuadratic, flicks, recommend, trackStats } from './analysis/score';
 import { adsFovH, aimingForRedDot, cm360FromGame, degPerCount, gameSensFromCm360, redDotCm360 } from './analysis/sens';
-import { nudge, strafe } from './drills';
+import { doorways, DRILLS, nudge, strafe } from './drills';
 import type { DrillLog } from './drills/stage';
 import { candidates, schedule, type Session } from './session';
 import { decode, encode, type Summary } from './share';
@@ -49,6 +49,43 @@ test('strafe path is seeded, bounded and continuous', () => {
     expect(Math.abs(a(t))).toBeLessThanOrEqual(35 + 1e-9);
     expect(Math.abs(a(t + 0.001) - a(t))).toBeLessThan(0.036); // ≤ 35°/s
   }
+});
+
+test('Phase 2 drills: doorways, scope walker, large turns, presets', () => {
+  for (let s = 0; s < 50; s++) {
+    const [a, b] = doorways(rng(s));
+    expect(Math.sign(a.yaw)).toBe(-Math.sign(b.yaw)); // opposite sides
+    for (const d of [a, b]) expect(Math.abs(d.yaw)).toBeGreaterThanOrEqual(4);
+    const walk = strafe(rng(s), 20, 4, [0.8, 1.7], [0.8, 2]);
+    for (let t = 0; t < 20; t += 0.05) {
+      expect(Math.abs(walk(t))).toBeLessThanOrEqual(4 + 1e-9);
+      expect(Math.abs(walk(t + 0.01) - walk(t))).toBeLessThanOrEqual(0.0171); // ≤ 1.7°/s
+    }
+    const tg = nextTarget({ yaw: 0, pitch: 0 }, rng(s), 90, 180);
+    expect(Math.abs(tg.yaw)).toBeGreaterThanOrEqual(90);
+    expect(Math.abs(tg.yaw)).toBeLessThanOrEqual(180);
+  }
+  for (const g of Object.values(games)) for (const list of Object.values(g.presets)) {
+    for (const d of list) expect(Object.keys(DRILLS)).toContain(d);
+  }
+});
+
+test('door watch: reaction, hit rate, early shots count as misses, drift while holding', () => {
+  const doors = [{ yaw: 10, pitch: 0 }, { yaw: -12, pitch: 0 }];
+  const l = log({
+    drill: 'door', durationMs: 5000, props: doors,
+    moves: [{ t: 50, dx: 100, dy: 0 }], // 1 count = 0.1°: aim to 10° at t=50, then hold door 1
+    spawns: [{ t: 1000, ...doors[0], until: 1500 }, { t: 3000, ...doors[1], until: 3400 }],
+    shots: [
+      { t: 800, yaw: 10, pitch: 0, hit: false }, // early: nothing showing
+      { t: 1300, yaw: 10, pitch: 0, hit: true }, // 300 ms after the peek
+    ],
+  });
+  const d = doorStats(l);
+  expect(d.react).toBe(300);
+  expect(d.hit).toBe(50); // 1 of 2 peeks
+  expect(d.acc).toBe(50); // 1 of 2 shots
+  expect(d.drift).toBeCloseTo(0, 4); // aim sat exactly on a doorway the whole time
 });
 
 test('nudge moves the target 1–3°', () => {

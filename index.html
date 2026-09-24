@@ -30,6 +30,7 @@
         </select>
       </label>
       <p id="reddot-row" class="field" hidden>Red-dot baseline <output name="reddot">—</output> cm/360</p>
+      <p class="hint">Drills: <span id="preset"></span></p>
       <label>Rounds per candidate
         <select name="rounds">
           <option value="2">2 (quicker, wider range)</option>
@@ -39,7 +40,7 @@
       </label>
       <label>Seed <input name="seed" type="number" /></label>
       <button id="begin" type="submit">Begin session</button>
-      <button id="quick" type="button" class="secondary">Quick Flick test (30 s)</button>
+      <button id="quick" type="button" class="secondary">Quick Flick test (20 s)</button>
       <label class="file-btn secondary">Open saved session <input id="open" type="file" accept=".json,application/json" /></label>
       <p class="hint">Chrome or Edge recommended for raw input. Esc aborts a trial; it restarts from the beginning.</p>
     </form>
@@ -62,6 +63,8 @@
   </main>
   <canvas id="stage" hidden></canvas>
   <div id="crosshair" hidden></div>
+  <div id="mask" aria-hidden="true"></div>
+  <div id="cue" aria-hidden="true"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

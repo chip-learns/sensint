@@ -96,26 +96,70 @@ export function trackStats(log: DrillLog, tr = trace(log)) {
   return { on: n ? (100 * on) / n : 0, err: n ? err / n : NaN };
 }
 
+/**
+ * Door watch: reaction = peek → hit; hit rate = peeks caught; accuracy = hits ÷ all shots (early shots
+ * count against it); drift = mean distance from the nearest doorway while waiting, sampled every
+ * 50 ms from 400 ms after each peek ends (time to settle back) until the next one starts.
+ */
+export function doorStats(log: DrillLog, tr = trace(log)) {
+  const peeks = log.spawns, doors = log.props ?? [];
+  const hits = log.shots.filter((s) => s.hit);
+  const react = hits.map((h) => h.t - peeks.filter((p) => p.t <= h.t).at(-1)!.t);
+  const drift: number[] = [];
+  let from = 400;
+  for (const [i, p] of [...peeks, { t: log.durationMs } as (typeof peeks)[number]].entries()) {
+    for (let t = from; t < p.t; t += 50) {
+      const a = tr[idx(tr, t)];
+      drift.push(Math.min(...doors.map((d) => angleBetween(a, d))));
+    }
+    const hit = hits.find((h) => h.t >= p.t && h.t <= (p.until ?? p.t));
+    from = (hit?.t ?? p.until ?? p.t) + 400;
+    if (i >= peeks.length) break;
+  }
+  return {
+    react: median(react),
+    hit: peeks.length ? (100 * hits.length) / peeks.length : NaN,
+    acc: log.shots.length ? (100 * hits.length) / log.shots.length : NaN,
+    drift: doors.length ? mean(drift) : NaN,
+  };
+}
+
 /** Metric → +1 if higher is better, -1 if lower is better. Weights live in games.json. */
 export const METRICS = {
   flickHits: 1, flickTTT: -1, flickOvershoot: -1, flickUndershoot: -1,
   trackOn: 1, trackErr: -1, microHits: 1, microCorr: -1,
+  turnTTT: -1, turnOvershoot: -1,
+  doorReact: -1, doorHit: 1, doorAcc: 1, doorDrift: -1,
+  scopeOn: 1, scopeErr: -1,
 } as const;
 export type MetricKey = keyof typeof METRICS;
 export type Metrics = Partial<Record<MetricKey, number>>;
 
 export function metrics(log: DrillLog): Metrics {
-  if (log.drill === 'flick') {
-    const f = flicks(log);
-    return {
-      flickHits: f.length, flickTTT: median(f.map((x) => x.ttt)),
-      flickOvershoot: 100 * mean(f.map((x) => x.overshoot)),
-      flickUndershoot: 100 * mean(f.map((x) => +x.undershoot)),
-    };
+  switch (log.drill) {
+    case 'flick': {
+      const f = flicks(log);
+      return {
+        flickHits: f.length, flickTTT: median(f.map((x) => x.ttt)),
+        flickOvershoot: 100 * mean(f.map((x) => x.overshoot)),
+        flickUndershoot: 100 * mean(f.map((x) => +x.undershoot)),
+      };
+    }
+    case 'turn': {
+      const f = flicks(log);
+      return { turnTTT: median(f.map((x) => x.ttt)), turnOvershoot: 100 * mean(f.map((x) => x.overshoot)) };
+    }
+    case 'track': { const t = trackStats(log); return { trackOn: t.on, trackErr: t.err }; }
+    case 'scope': { const t = trackStats(log); return { scopeOn: t.on, scopeErr: t.err }; }
+    case 'door': {
+      const d = doorStats(log);
+      return { doorReact: d.react, doorHit: d.hit, doorAcc: d.acc, doorDrift: d.drift };
+    }
+    case 'micro': {
+      const m = micros(log);
+      return { microHits: m.length, microCorr: median(m.map((x) => x.corr).filter(Number.isFinite)) };
+    }
   }
-  if (log.drill === 'track') { const t = trackStats(log); return { trackOn: t.on, trackErr: t.err }; }
-  const m = micros(log);
-  return { microHits: m.length, microCorr: median(m.map((x) => x.corr).filter(Number.isFinite)) };
 }
 
 /** Least-squares y = a·x² + b·x + c. */

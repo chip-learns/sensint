@@ -13,8 +13,16 @@ const esc = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCode
 const fmt = (x: number | undefined, d = 1) => (x !== undefined && Number.isFinite(x) ? x.toFixed(d) : '—');
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
-/** Renders the full subject file into el; returns its shareable summary. */
-export function renderDebrief(s: Session, el: HTMLElement): Summary {
+// Evidence columns and session stats; a column shows only when its drill ran.
+const COLUMNS: [MetricKey, string, string, number][] = [
+  ['flickTTT', 'Flick time', ' ms', 0], ['flickOvershoot', 'Overshoot', '%', 1], ['trackOn', 'Track on', '%', 0],
+  ['microCorr', 'Micro fix', ' ms', 0], ['turnTTT', 'Turn time', ' ms', 0], ['doorReact', 'Door react', ' ms', 0],
+  ['doorAcc', 'Door acc', '%', 0], ['scopeOn', 'Scope on', '%', 0],
+];
+export type Stats = Partial<Record<MetricKey, number>>;
+
+/** Renders the full subject file into el; returns its shareable summary and session-wide metric means. */
+export function renderDebrief(s: Session, el: HTMLElement): { sum: Summary; stats: Stats } {
   const game = (s.intake.game in games ? s.intake.game : 'tarkov') as GameId;
   const logs = s.trials.map((t) => t.log).filter((l): l is DrillLog => !!l);
   const { byCode, rec } = analyze(s.trials.filter((t) => t.log).map((t) => ({ ...t, log: t.log! })), games[game].weights);
@@ -35,17 +43,35 @@ export function renderDebrief(s: Session, el: HTMLElement): Summary {
 
   const hz = 1000 / median(logs.flatMap((l) => l.moves.slice(1).map((m, i) => m.t - l.moves[i].t)));
   const raw = logs.every((l) => l.rawInput);
+  const cols = COLUMNS.filter(([k]) => codes.some(([, c]) => Number.isFinite(c.m[k])));
+  const stats: Stats = Object.fromEntries(cols.map(([k]) =>
+    [k, codes.reduce((a, [, c]) => a + (c.m[k] ?? 0), 0) / codes.filter(([, c]) => Number.isFinite(c.m[k])).length]));
   el.innerHTML = renderCard(sum) + (ads ? '' : padCheck(s.intake.padCm, sum.rec?.final)) + `
-    <table><thead><tr><th>Code</th><th>cm/360</th><th>Score</th><th>Flick hits</th><th>Flick time</th><th>Overshoot</th><th>Track on</th><th>Micro fix</th></tr></thead><tbody>
+    <table><thead><tr><th>Code</th><th>cm/360</th><th>Score</th>${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>
     ${codes.map(([code, c]) => `<tr${sum.rec && r1(c.cm360) === sum.rec.final ? ' class="best"' : ''}><td>${esc(code)}</td><td>${fmt(c.cm360)}</td><td>${fmt(c.score, 0)}</td>
-      <td>${fmt(c.m.flickHits)}</td><td>${fmt(c.m.flickTTT, 0)} ms</td><td>${fmt(c.m.flickOvershoot)}%</td>
-      <td>${fmt(c.m.trackOn)}%</td><td>${fmt(c.m.microCorr, 0)} ms</td></tr>`).join('')}
+      ${cols.map(([k, , unit, d]) => `<td>${fmt(c.m[k], d)}${unit}</td>`).join('')}</tr>`).join('')}
     </tbody></table>
     <h3>Findings</h3>
     <ul>${findings(codes).map((f) => `<li>${f}</li>`).join('')}</ul>
     <p class="hint">Data quality: ${raw ? 'raw input on every trial' : '<span class="warn">some trials without raw input</span>'} ·
       ~${fmt(hz, 0)} Hz mouse reports · ${logs.length} trials. Score 50 = your session average.</p>`;
-  return sum;
+  return { sum, stats };
+}
+
+export type HistoryEntry = { id: string; date: string; game: string; kind: 'hip' | 'ads'; rec: Summary['rec']; cur: number; stats: Stats };
+
+/** Your earlier sessions next to this one: verdicts, ranges and session-wide averages. */
+export function renderHistory(entries: HistoryEntry[], currentId: string) {
+  if (entries.length < 2) return '<h3>Your sessions</h3><p class="hint">This is your first saved session; later ones will be compared here.</p>';
+  const cols = COLUMNS.filter(([k]) => entries.some((e) => Number.isFinite(e.stats[k])));
+  return `<h3>Your sessions</h3><table><thead><tr><th>Date</th><th>Type</th><th>Current</th><th>Verdict</th><th>Range</th><th>Conf.</th>
+    ${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>
+    ${entries.map((e) => `<tr${e.id === currentId ? ' class="best"' : ''}><td>${esc(e.date)}</td>
+      <td>${esc(games[e.game as GameId]?.name ?? e.game)} ${e.kind === 'ads' ? 'red dot' : 'hip'}</td><td>${fmt(e.cur)}</td>
+      <td>${e.rec ? fmt(e.rec.final) : '—'}</td><td>${e.rec ? `${fmt(e.rec.lo)}–${fmt(e.rec.hi)}` : '—'}</td><td>${e.rec ? esc(e.rec.conf) : '—'}</td>
+      ${cols.map(([k, , unit, d]) => `<td>${fmt(e.stats[k], d)}${Number.isFinite(e.stats[k]) ? unit : ''}</td>`).join('')}</tr>`).join('')}
+    </tbody></table>
+    <p class="hint">Averages cover all candidates in each session, so sessions centred on different sensitivities aren't strictly comparable. Stored only in this browser.</p>`;
 }
 
 /** Header, verdict, settings and score chart: everything a share link carries. */
@@ -127,6 +153,11 @@ function findings(codes: [string, { cm360: number; m: Partial<Record<MetricKey, 
   line('flickOvershoot', 'Overshoot', false, '% past the target', 1);
   line('trackOn', 'Tracking', true, '% on target', 0);
   line('microCorr', 'Micro-corrections', false, ' ms to fix a nudge', 0);
+  line('turnTTT', 'Large turns', false, ' ms median', 0);
+  line('doorReact', 'Door reactions', false, ' ms median', 0);
+  line('doorAcc', 'Door accuracy', true, '% of shots', 0);
+  line('doorDrift', 'Holding the angle', false, '° average drift', 1);
+  line('scopeOn', 'Scoped tracking', true, '% on target', 0);
   return out;
 }
 

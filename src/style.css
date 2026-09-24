@@ -48,6 +48,19 @@ tr.best td { background: #d8cfa8; font-weight: bold; }
 .chart .band { fill: #a8261b1f; }
 /* Red-dot reticle for aiming sessions: a small glowing dot instead of the green crosshair dot. */
 #crosshair.reddot { width: 6px; height: 6px; margin: -3px 0 0 -3px; background: #ff2a1a; box-shadow: 0 0 6px 1px #ff2a1acc; }
+/* Scope: everything outside a centred circle is black (drill sets body[data-mask]). */
+#mask, #cue { display: none; position: fixed; pointer-events: none; }
+body[data-mask="on"] #mask {
+  display: block; inset: 0;
+  background: radial-gradient(circle at center, transparent 0 calc(min(46vw, 46vh)), #000 calc(min(46vw, 46vh) + 2px));
+}
+/* Large turn: arrow at the screen edge on the side to turn toward (body[data-cue]). */
+body[data-cue="left"] #cue, body[data-cue="right"] #cue {
+  display: block; top: 50%; width: 0; height: 0; margin-top: -40px;
+  border-top: 40px solid transparent; border-bottom: 40px solid transparent;
+}
+body[data-cue="left"] #cue { left: 24px; border-right: 56px solid #ff2a1acc; }
+body[data-cue="right"] #cue { right: 24px; border-left: 56px solid #ff2a1acc; }
 #share-out { display: block; width: 100%; margin-top: .8rem; font-size: .75rem; }
 .chart .code { font-weight: bold; fill: var(--ink); }
 .file:has(#result:not([hidden])) { max-width: 44rem; }

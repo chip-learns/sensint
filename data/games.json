@@ -4,6 +4,7 @@
     "yaw": 0.022,
     "verified": true,
     "source": "https://developer.valvesoftware.com/wiki/Sensitivity",
+    "presets": { "hip": ["flick", "track", "micro"] },
     "weights": { "flickHits": 2, "flickTTT": 1.5, "flickOvershoot": 1, "trackOn": 0.5, "trackErr": 0.5, "microHits": 1, "microCorr": 1 }
   },
   "tarkov": {
@@ -13,13 +14,18 @@
     "source": "https://www.mouse-sensitivity.com/n/escape-from-tarkov/ ; hand-measured 2026-09-24: 600 DPI @ 0.435 predicts 28.0 cm/360, measured ~26.7 cm",
     "adsFactor": 1.29,
     "adsSource": "hand-measured 2026-09-24 at 0.528/0.394, same rifle: hip 24.0, red dot 41.6, 4x scope 168 cm/360; k = (41.6/24.0)/(0.528/0.394)",
-    "weights": { "flickHits": 1, "flickTTT": 0.5, "flickOvershoot": 1, "trackOn": 1.5, "trackErr": 1, "microHits": 1, "microCorr": 1.5 }
+    "presets": { "hip": ["flick", "track", "micro", "turn"], "ads": ["flick", "track", "door", "scope"] },
+    "weights": {
+      "flickHits": 1, "flickTTT": 0.5, "flickOvershoot": 1, "trackOn": 1.5, "trackErr": 1, "microHits": 1, "microCorr": 1.5,
+      "turnTTT": 1, "turnOvershoot": 1, "doorReact": 1.5, "doorHit": 1, "doorAcc": 1, "doorDrift": 1, "scopeOn": 1.5, "scopeErr": 1
+    }
   },
   "wardogs": {
     "name": "Wardogs",
     "yaw": null,
     "verified": false,
     "source": "Needs in-game calibration (Phase 2)",
+    "presets": { "hip": ["flick", "track", "micro"] },
     "weights": { "flickHits": 1, "flickTTT": 1, "flickOvershoot": 1, "trackOn": 1.5, "trackErr": 1.5, "microHits": 1, "microCorr": 1 }
   }
 }

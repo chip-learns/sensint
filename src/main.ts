@@ -5,7 +5,8 @@ import { DRILLS, flick } from './drills';
 import { runDrill, type Drill, type DrillName } from './drills/stage';
 import { candidates, schedule, type Intake, type Session, type Trial } from './session';
 import { decode, encode, type Summary } from './share';
-import { renderCard, renderDebrief } from './ui/debrief';
+import { saveToHistory } from './history';
+import { renderCard, renderDebrief, renderHistory } from './ui/debrief';
 
 type GameId = keyof typeof games;
 
@@ -34,10 +35,19 @@ const baseline = () => {
   const red = redDot(cm);
   $('reddot-row').hidden = f.kind.value !== 'ads';
   f.reddot.value = Number.isFinite(red) ? red.toFixed(1) : '— (needs Tarkov + aiming sensitivity)';
-  // 75 s warm-up + per round 5 candidates × (75 s of drills + ~10 s of briefings)
-  $('begin').textContent = `Begin session (~${Math.round((75 + +f.rounds.value * 5 * 85) / 60)} min)`;
+  // 75 s warm-up + per round 5 candidates × (the preset's drills + ~5 s of briefing each)
+  const drills = preset();
+  const perCandidate = drills.reduce((s, d) => s + DRILLS[d].seconds + 5, 0);
+  $('begin').textContent = `Begin session (~${Math.round((75 + +f.rounds.value * 5 * perCandidate) / 60)} min)`;
+  $('preset').textContent = drills.map((d) => DRILLS[d].label).join(' · ');
   return cm;
 };
+/** Drills the chosen game and session type run (games.json presets). */
+function preset(): DrillName[] {
+  const p: Record<string, string[] | undefined> = games[f.game.value as GameId].presets;
+  return (p[f.kind.value] ?? p.hip!) as DrillName[];
+}
+
 /** Current Tarkov red-dot cm/360 from the intake, or NaN if it can't be known. */
 function redDot(hipCm: number) {
   return f.game.value === 'tarkov' && +f.aiming.value > 0 ? redDotCm360(hipCm, +f.sens.value, +f.aiming.value, K) : NaN;
@@ -102,7 +112,7 @@ async function session(quick: boolean) {
   const cands = quick ? [{ code: 'BASELINE', cm360: cm }] : candidates(base, rand);
   const plan: Trial[] = quick
     ? [{ ...cands[0], drill: 'flick' }]
-    : schedule(cands, intake.rounds!, rand).flatMap((c) => (Object.keys(DRILLS) as DrillName[]).map((drill) => ({ ...c, drill })));
+    : schedule(cands, intake.rounds!, rand).flatMap((c) => preset().map((drill) => ({ ...c, drill })));
 
   try {
     show('brief', quick ? 'Quick test' : ads ? 'Red-dot trials' : 'Field trials');
@@ -126,7 +136,12 @@ let summary: Summary | undefined;
 /** Own session: full debrief with export, follow-up and share. */
 function debrief(s: Session) {
   last = s;
-  summary = renderDebrief(s, $('debrief'));
+  const { sum, stats } = renderDebrief(s, $('debrief'));
+  summary = sum;
+  // id sorts by time: createdAt first, seed to separate same-second sessions
+  const id = `${s.createdAt}#${s.intake.seed}`;
+  const history = saveToHistory({ id, date: sum.date, game: sum.game, kind: s.intake.kind ?? 'hip', rec: sum.rec, cur: sum.cur, stats });
+  $('debrief').insertAdjacentHTML('beforeend', renderHistory(history.slice(-10), id));
   $('follow').hidden = !summary.rec;
   for (const id of ['export', 'share']) $(id).hidden = false;
   $('share-out').hidden = true;
