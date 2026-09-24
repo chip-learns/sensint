@@ -157,7 +157,12 @@ $('follow').addEventListener('click', () => {
   if (followUp === null || !g?.yaw) return;
   f.dpi.value = String(s.intake.dpi);
   f.game.value = s.intake.game;
-  f.sens.value = gameSensFromCm360(followUp, s.intake.dpi, g.yaw).toFixed(3);
+  const sens = gameSensFromCm360(followUp, s.intake.dpi, g.yaw);
+  f.sens.value = sens.toFixed(3);
+  // Carry the rest of the intake over; aiming keeps its ratio to hip so the debrief can still convert it.
+  f.aiming.value = s.intake.aimingSens && s.intake.sens ? ((sens * s.intake.aimingSens) / s.intake.sens).toFixed(3) : '';
+  f.pad.value = s.intake.padCm ? String(s.intake.padCm) : '';
+  f.codename.value = s.intake.codeName ?? '';
   newSeed();
   baseline();
   show('form', 'Intake form');
