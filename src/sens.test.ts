@@ -109,6 +109,15 @@ test('quadratic fit recovers a known curve; recommend finds the peak or flags th
   const peak = recommend(pts((x) => 80 - 40 * (x - Math.log(26)) ** 2))!;
   expect(peak.cm360).toBeCloseTo(26, 6);
   expect(peak.edge).toBeNull();
+  expect(peak.confidence).toBe('high'); // noiseless: every resample agrees
+  expect(peak.hi / peak.lo).toBeCloseTo(1, 6);
+  // Noisy rounds: two per candidate that disagree → wider band containing the peak.
+  const noisy = pts((x) => 80 - 40 * (x - Math.log(26)) ** 2).flatMap((p, i) =>
+    [{ ...p, score: p.score + (i % 2 ? 12 : -12) }, { ...p, score: p.score - (i % 2 ? 12 : -12) }]);
+  const nr = recommend(noisy)!;
+  expect(nr.lo).toBeLessThanOrEqual(nr.cm360);
+  expect(nr.hi).toBeGreaterThanOrEqual(nr.cm360);
+  expect(nr.hi / nr.lo).toBeGreaterThan(1.05);
   const fast = recommend(pts((x) => 100 - 20 * x))!; // monotonic: faster is always better
   expect(fast.edge).toBe('fast');
   expect(fast.cm360).toBeCloseTo(16, 9);
@@ -126,4 +135,9 @@ test('recorded session (Chip, 2026-09-24) analyses end to end', () => {
   expect(rec).not.toBeNull();
   expect(rec!.cm360).toBeGreaterThanOrEqual(16.8 - 1e-9);
   expect(rec!.cm360).toBeLessThanOrEqual(44.9);
+  // A plateau from 16.8 to 28 cm shouldn't produce a confident single number.
+  expect(rec!.confidence).not.toBe('high');
+  // ALPHA (16.8) and BRAVO (28.0, current) tied; the band must cover both, so the verdict is "keep".
+  expect(rec!.lo).toBeLessThanOrEqual(16.8);
+  expect(rec!.hi).toBeGreaterThanOrEqual(s.intake.baselineCm360 - 1e-9);
 });

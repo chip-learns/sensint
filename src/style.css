@@ -45,6 +45,7 @@ tr.best td { background: #d8cfa8; font-weight: bold; }
 .chart .fit { fill: none; stroke: var(--ink); stroke-width: 1.5; }
 .chart .verdict { stroke: var(--red); stroke-dasharray: 4 3; }
 .chart .grid { stroke: #0002; }
+.chart .band { fill: #a8261b1f; }
 .chart .code { font-weight: bold; fill: var(--ink); }
 .file:has(#result:not([hidden])) { max-width: 44rem; }
 .field output { font-weight: bold; font-size: 1.2rem; }

@@ -1,7 +1,7 @@
 // Phase 1c analysis: raw logs → per-trial metrics → per-candidate scores → fitted recommendation.
 // Pure functions; everything is derived from the raw log, so new metrics need no re-testing.
 import type { DrillLog, DrillName } from '../drills/stage';
-import { angleBetween, applyMove, type Aim } from './aim';
+import { angleBetween, applyMove, rng, type Aim } from './aim';
 import { degPerCount } from './sens';
 
 export type Pt = { t: number } & Aim;
@@ -140,13 +140,50 @@ export function fitQuadratic(xs: number[], ys: number[]): [number, number, numbe
 }
 
 export type Point = { code: string; cm360: number; score: number };
-export type Recommendation = { cm360: number; edge: 'fast' | 'slow' | null; coef: [number, number, number] };
+type Peak = { cm360: number; edge: 'fast' | 'slow' | null; coef: [number, number, number] };
+export type Recommendation = Peak & { lo: number; hi: number; confidence: 'high' | 'medium' | 'low' };
+
+/**
+ * Fitted peak plus a confidence band: re-fit on 500 resamples of the rounds (each candidate
+ * keeps its count of rounds, drawn with replacement) and take the middle 68% of peaks.
+ * A wide band means the scores can't tell those sensitivities apart.
+ */
+export function recommend(points: Point[], rand = rng(1)): Recommendation | null {
+  const peak = fitPeak(points);
+  if (!peak) return null;
+  const groups = Object.values(Object.groupBy(points, (p) => p.code)) as Point[][];
+  const peaks: number[] = [];
+  for (let i = 0; i < 500; i++) {
+    const sample = groups.flatMap((g) => g.map(() => g[Math.floor(rand() * g.length)]));
+    peaks.push(Math.log(fitPeak(sample)!.cm360));
+  }
+  peaks.sort((a, b) => a - b);
+  let lo = Math.exp(peaks[Math.floor(0.16 * peaks.length)]);
+  let hi = Math.exp(peaks[Math.floor(0.84 * peaks.length)]);
+
+  // Resampling can't see model bias: a quadratic forced through a plateau-then-drop puts the peak
+  // at the plateau's edge every time. So also cover every candidate whose mean score is within
+  // 1σ of the best, σ = round-to-round noise of a difference between two candidate means.
+  const cands = groups.map((g) => ({ cm: g[0].cm360, mu: mean(g.map((p) => p.score)), n: g.length }));
+  const within = mean(groups.filter((g) => g.length > 1).map((g) => {
+    const mu = mean(g.map((p) => p.score));
+    return g.reduce((a, p) => a + (p.score - mu) ** 2, 0) / (g.length - 1);
+  }));
+  if (Number.isFinite(within)) {
+    const sd = Math.sqrt((2 * within) / mean(cands.map((c) => c.n)));
+    const best = Math.max(...cands.map((c) => c.mu));
+    for (const c of cands) if (c.mu >= best - sd) { lo = Math.min(lo, c.cm); hi = Math.max(hi, c.cm); }
+  }
+  const ratio = hi / lo;
+  // ponytail: ±1σ band from ~2 rounds per candidate is coarse; more rounds tighten it (Phase 3 adaptive sweep)
+  return { ...peak, lo: Math.min(lo, peak.cm360), hi: Math.max(hi, peak.cm360), confidence: ratio <= 1.15 ? 'high' : ratio <= 1.35 ? 'medium' : 'low' };
+}
 
 /**
  * Peak of a quadratic in log(cm/360). If the curve has no peak inside the tested range,
  * return the better end and flag it: the true optimum lies beyond what was tested.
  */
-export function recommend(points: Point[]): Recommendation | null {
+function fitPeak(points: Point[]): Peak | null {
   if (new Set(points.map((p) => p.code)).size < 3) return null;
   const xs = points.map((p) => Math.log(p.cm360));
   const coef = fitQuadratic(xs, points.map((p) => p.score));

@@ -20,14 +20,23 @@ export function renderDebrief(s: Session, el: HTMLElement): Recommendation | nul
   );
   const codes = Object.entries(byCode).sort((a, b) => a[1].cm360 - b[1].cm360);
 
+  // Current sensitivity inside the band = the data can't show a change would help, so keep it.
+  const cur = s.intake.baselineCm360;
+  const keep = !!rec && cur >= rec.lo && cur <= rec.hi;
+  const final = keep ? cur : rec?.cm360;
   const verdict = rec
-    ? `<p class="big">${fmt(rec.cm360)} <small>cm/360</small></p>
-       <p>Current: ${fmt(s.intake.baselineCm360)} cm/360 · weighted for ${esc(games[game].name)}</p>
+    ? `<p class="big">${keep ? 'Keep ' : ''}${fmt(final)} <small>cm/360</small></p>
+       <p>Best range ${fmt(rec.lo)}–${fmt(rec.hi)} cm/360 · <strong>${rec.confidence} confidence</strong> · fitted peak ${fmt(rec.cm360)} ·
+         weighted for ${esc(games[game].name)}</p>
+       <p>${keep
+         ? `Your current ${fmt(cur)} cm/360 is inside the best range: changing would not measurably help.`
+         : `Your current ${fmt(cur)} cm/360 is outside the best range; move to ${fmt(final)}.`}</p>
        ${rec.edge ? `<p class="warn">Your best result was the ${rec.edge === 'fast' ? 'fastest' : 'slowest'} candidate tested, so the true optimum
-         may lie ${rec.edge === 'fast' ? 'faster' : 'slower'} still. Run a follow-up session centred here to find it.</p>` : ''}`
+         may lie ${rec.edge === 'fast' ? 'faster' : 'slower'} still. Run a follow-up session centred here to find it.</p>` : ''}
+       ${rec.confidence === 'low' ? '<p class="hint">Low confidence: several sensitivities scored within noise of each other. Another session narrows the range.</p>' : ''}`
     : '<p>Quick test: one candidate only, so there is no recommendation. Run a full session for a verdict.</p>';
 
-  const settings = rec ? settingsTable(s, rec.cm360) : '';
+  const settings = final !== undefined ? settingsTable(s, final) : '';
 
   const hz = 1000 / median(logs.flatMap((l) => l.moves.slice(1).map((m, i) => m.t - l.moves[i].t)));
   const raw = logs.every((l) => l.rawInput);
@@ -102,7 +111,9 @@ function chart(points: Point[], rec: Recommendation | null) {
       const lc = x0 + ((x1 - x0) * i) / 40;
       return `${X(lc).toFixed(1)},${Y(Math.max(0, Math.min(100, a * lc * lc + b * lc + c))).toFixed(1)}`;
     });
-    curve = `<polyline points="${pts.join(' ')}" class="fit"/>
+    const bx0 = X(Math.log(rec.lo)), bx1 = X(Math.log(rec.hi));
+    curve = `<rect x="${bx0}" y="${T}" width="${Math.max(1, bx1 - bx0)}" height="${H - T - B}" class="band"/>
+      <polyline points="${pts.join(' ')}" class="fit"/>
       <line x1="${X(Math.log(rec.cm360))}" x2="${X(Math.log(rec.cm360))}" y1="${T}" y2="${H - B}" class="verdict"/>`;
   }
   const ticks = [...new Map(points.map((p) => [p.code, p])).values()].map((p) =>
@@ -112,5 +123,5 @@ function chart(points: Point[], rec: Recommendation | null) {
     <text x="${L - 6}" y="${Y(s) + 4}" text-anchor="end">${s}</text>`).join('');
   const dots = points.map((p) => `<circle cx="${X(Math.log(p.cm360))}" cy="${Y(p.score)}" r="4"/>`).join('');
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Score by sensitivity">${grid}${curve}${dots}${ticks}</svg>
-    <p class="hint">Score by cm/360 (log scale). Dots are single rounds, the line is the fitted curve, the dashed line is the verdict.</p>`;
+    <p class="hint">Score by cm/360 (log scale). Dots are single rounds, the line is the fitted curve, the shaded area is the best range, the dashed line is the fitted peak.</p>`;
 }
