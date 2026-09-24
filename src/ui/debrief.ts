@@ -60,18 +60,25 @@ export function renderDebrief(s: Session, el: HTMLElement): { sum: Summary; stat
 
 export type HistoryEntry = { id: string; date: string; game: string; kind: 'hip' | 'ads'; rec: Summary['rec']; cur: number; stats: Stats };
 
-/** Your earlier sessions next to this one: verdicts, ranges and session-wide averages. */
+/** Your sessions next to this one: verdicts, ranges, session-wide averages, and backup controls. */
 export function renderHistory(entries: HistoryEntry[], currentId: string) {
-  if (entries.length < 2) return '<h3>Your sessions</h3><p class="hint">This is your first saved session; later ones will be compared here.</p>';
+  const tools = `<p class="history-tools"><button type="button" class="secondary" data-export-all>Export all sessions (backup)</button>
+    <label class="file-btn secondary">Import backup <input type="file" data-import accept=".gz,.json,application/json,application/gzip" /></label></p>
+    <p class="hint">Stored only in this browser. A backup file moves them to another browser or PC, and keeps them safe if browser data is cleared.</p>`;
+  if (!entries.length) return `<h3>Your sessions</h3><p class="hint">No sessions saved in this browser yet.</p>${tools}`;
+  if (entries.length === 1 && entries[0].id === currentId)
+    return `<h3>Your sessions</h3><p class="hint">This is your first saved session; later ones will be compared here.</p>${tools}`;
   const cols = COLUMNS.filter(([k]) => entries.some((e) => Number.isFinite(e.stats[k])));
   return `<h3>Your sessions</h3><table><thead><tr><th>Date</th><th>Type</th><th>Current</th><th>Verdict</th><th>Range</th><th>Conf.</th>
-    ${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>
-    ${entries.map((e) => `<tr${e.id === currentId ? ' class="best"' : ''}><td>${esc(e.date)}</td>
+    ${cols.map(([, label]) => `<th>${label}</th>`).join('')}<th></th></tr></thead><tbody>
+    ${[...entries].reverse().map((e) => `<tr${e.id === currentId ? ' class="best"' : ''}><td>${esc(e.date)}</td>
       <td>${esc(games[e.game as GameId]?.name ?? e.game)} ${e.kind === 'ads' ? 'red dot' : 'hip'}</td><td>${fmt(e.cur)}</td>
       <td>${e.rec ? fmt(e.rec.final) : '—'}</td><td>${e.rec ? `${fmt(e.rec.lo)}–${fmt(e.rec.hi)}` : '—'}</td><td>${e.rec ? esc(e.rec.conf) : '—'}</td>
-      ${cols.map(([k, , unit, d]) => `<td>${fmt(e.stats[k], d)}${Number.isFinite(e.stats[k]) ? unit : ''}</td>`).join('')}</tr>`).join('')}
+      ${cols.map(([k, , unit, d]) => `<td>${fmt(e.stats[k], d)}${Number.isFinite(e.stats[k]) ? unit : ''}</td>`).join('')}
+      <td>${e.id === currentId ? '' : `<button type="button" class="link" data-open="${esc(e.id)}">Open</button>`}</td></tr>`).join('')}
     </tbody></table>
-    <p class="hint">Averages cover all candidates in each session, so sessions centred on different sensitivities aren't strictly comparable. Stored only in this browser.</p>`;
+    <p class="hint">Newest first. Averages cover all candidates in each session, so sessions centred on different sensitivities aren't strictly comparable.</p>
+    ${tools}`;
 }
 
 /** Header, verdict, settings and score chart: everything a share link carries. */

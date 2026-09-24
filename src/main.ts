@@ -5,8 +5,8 @@ import { DRILLS, flick } from './drills';
 import { runDrill, type Drill, type DrillName } from './drills/stage';
 import { candidates, schedule, type Intake, type Session, type Trial } from './session';
 import { decode, encode, type Summary } from './share';
-import { saveToHistory } from './history';
-import { renderCard, renderDebrief, renderHistory } from './ui/debrief';
+import { allSessions, backupBlob, getSession, loadHistory, putSession, readSessions, saveToHistory, sessionId } from './history';
+import { renderCard, renderDebrief, renderHistory, type Stats } from './ui/debrief';
 
 type GameId = keyof typeof games;
 
@@ -169,21 +169,77 @@ async function session(quick: boolean) {
 
 let summary: Summary | undefined;
 
-/** Own session: full debrief with export, follow-up and share. */
+/** Keep a session: its summary for the history table, the full session for reopening later. */
+function record(s: Session, sum: Summary, stats: Stats) {
+  putSession(s).catch(() => { /* IndexedDB unavailable: the summary list still works */ });
+  const id = sessionId(s);
+  return { id, list: saveToHistory({ id, date: sum.date, game: sum.game, kind: s.intake.kind ?? 'hip', rec: sum.rec, cur: sum.cur, stats }) };
+}
+
+/** Own session: full debrief with export, follow-up and share, plus the last 10 sessions. */
 function debrief(s: Session) {
   last = s;
   const { sum, stats } = renderDebrief(s, $('debrief'));
   summary = sum;
-  // id sorts by time: createdAt first, seed to separate same-second sessions
-  const id = `${s.createdAt}#${s.intake.seed}`;
-  const history = saveToHistory({ id, date: sum.date, game: sum.game, kind: s.intake.kind ?? 'hip', rec: sum.rec, cur: sum.cur, stats });
-  $('debrief').insertAdjacentHTML('beforeend', renderHistory(history.slice(-10), id));
+  const { id, list } = record(s, sum, stats);
+  $('debrief').insertAdjacentHTML('beforeend', renderHistory(list.slice(-10), id));
   $('follow').hidden = !summary.rec;
-  for (const id of ['export', 'share']) $(id).hidden = false;
+  for (const b of ['export', 'share']) $(b).hidden = false;
   $('share-out').hidden = true;
   $('again').textContent = 'New session';
   show('result', 'Debrief');
 }
+
+/** Every session saved in this browser, with backup export and import. */
+function showHistory() {
+  $('debrief').innerHTML = renderHistory(loadHistory(), '');
+  for (const b of ['export', 'follow', 'share', 'share-out']) $(b).hidden = true;
+  $('again').textContent = 'New session';
+  show('result', 'Your sessions');
+}
+
+/** A session file opens its debrief; a backup (or several sessions) is stored, then the history shows. */
+async function importFile(file: File) {
+  const sessions = await readSessions(file);
+  if (sessions.length === 1) return debrief(sessions[0]);
+  const scratch = document.createElement('div'); // analysis renders here, off-screen
+  for (const s of sessions) { const { sum, stats } = renderDebrief(s, scratch); record(s, sum, stats); }
+  showHistory();
+}
+
+async function exportAll(button: HTMLElement) {
+  const sessions = await allSessions().catch(() => [] as Session[]);
+  if (!sessions.length) { button.textContent = 'No full sessions stored yet'; return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(await backupBlob(sessions));
+  a.download = `sensint-backup-${new Date().toISOString().slice(0, 10)}.json.gz`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  button.textContent = `Exported ${sessions.length} sessions`;
+}
+
+const fail = (err: unknown) => {
+  $('warn').hidden = false;
+  $('warn').textContent = `Could not open that file: ${(err as Error).message}`;
+  show('form', 'Intake form');
+};
+
+// History table controls live inside #debrief, so listen there.
+$('debrief').addEventListener('click', async (e) => {
+  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-open],[data-export-all]');
+  if (!el) return;
+  if (el.dataset.exportAll !== undefined) return exportAll(el);
+  const s = await getSession(el.dataset.open!).catch(() => undefined);
+  if (s) debrief(s);
+  else el.textContent = 'Not stored in full; open its JSON file';
+});
+$('debrief').addEventListener('change', (e) => {
+  const input = e.target as HTMLInputElement;
+  const file = input.matches('[data-import]') ? input.files?.[0] : undefined;
+  input.value = '';
+  if (file) importFile(file).catch(fail);
+});
+$('history').addEventListener('click', showHistory);
 
 /** Someone's share link: the card only. */
 async function openLink() {
@@ -259,13 +315,5 @@ $('export').addEventListener('click', () => {
 $<HTMLInputElement>('open').addEventListener('change', async (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   (e.target as HTMLInputElement).value = '';
-  if (!file) return;
-  try {
-    const s = JSON.parse(await file.text()) as Session;
-    if (s?.app !== 'sensint' || !Array.isArray(s.trials)) throw new Error('not a SENSINT session file');
-    debrief(s);
-  } catch (err) {
-    $('warn').hidden = false;
-    $('warn').textContent = `Could not open that file: ${(err as Error).message}`;
-  }
+  if (file) await importFile(file).catch(fail);
 });

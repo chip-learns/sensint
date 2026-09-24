@@ -9,6 +9,7 @@ import { doorway, DRILLS, nudge, pan, strafe } from './drills';
 import type { DrillLog } from './drills/stage';
 import { candidates, schedule, type Session } from './session';
 import { decode, encode, type Summary } from './share';
+import { backupBlob, readSessions, sessionId } from './history';
 
 test('CS2 800 DPI @ 1.2 is ~43.3 cm/360 and round-trips', () => {
   const cm = cm360FromGame(800, 1.2, 0.022);
@@ -224,6 +225,16 @@ test('pad check: 180° travel against pad width minus the mouse', async () => {
   expect(padCheck(null, 28)).toBe('');
   expect(padCheck(45, 28)).toContain('It fits'); // 14 cm needed, 39 cm room
   expect(padCheck(18, 28)).toContain('does not fit'); // 14 cm needed, 12 cm room
+});
+
+test('backup file round-trips sessions; single session files still open; junk is rejected', async () => {
+  const a = { app: 'sensint', version: 1, createdAt: '2026-09-24T10:00:00.000Z', intake: { seed: 1 }, trials: [] } as unknown as Session;
+  const b = { ...a, createdAt: '2026-09-25T10:00:00.000Z', intake: { seed: 2 } } as unknown as Session;
+  const gz = await backupBlob([a, b]);
+  expect(await readSessions(new File([gz], 'sensint-backup.json.gz'))).toEqual([a, b]);
+  expect(await readSessions(new File([JSON.stringify(a)], 'sensint-session-1.json'))).toEqual([a]);
+  await expect(readSessions(new File(['{"hello":1}'], 'x.json'))).rejects.toThrow('not a SENSINT');
+  expect(sessionId(a) < sessionId(b)).toBe(true); // ids sort by time
 });
 
 test('recorded session (Chip, 2026-09-24) analyses end to end', () => {
