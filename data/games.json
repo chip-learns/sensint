@@ -8,8 +8,8 @@
   "tarkov": {
     "name": "Escape from Tarkov",
     "yaw": 0.125,
-    "verified": false,
-    "source": "TODO: verify against a community reference before Phase 1c"
+    "verified": true,
+    "source": "https://www.mouse-sensitivity.com/n/escape-from-tarkov/ ; hand-measured 2026-09-24: 600 DPI @ 0.435 predicts 28.0 cm/360, measured ~26.7 cm"
   },
   "wardogs": {
     "name": "Wardogs",
