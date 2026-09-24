@@ -177,7 +177,7 @@ async function session(quick: boolean) {
       seen.add(t.drill);
     }
     document.exitPointerLock();
-    debrief({ app: 'sensint', version: 1, createdAt: new Date().toISOString(), intake, candidates: cands, warmup, trials: plan });
+    await debrief({ app: 'sensint', version: 1, createdAt: new Date().toISOString(), intake, candidates: cands, warmup, trials: plan });
   } catch (e) {
     document.exitPointerLock();
     show('form', 'Intake form');
@@ -196,9 +196,10 @@ function record(s: Session, sum: Summary, stats: Stats) {
 }
 
 /** Own session: full debrief with export, follow-up and share, plus the last 10 sessions. */
-function debrief(s: Session) {
+async function debrief(s: Session) {
   last = s;
-  const { sum, stats } = renderDebrief(s, $('debrief'));
+  const stored = await allSessions().catch(() => []); // earlier sessions of the same candidates combine in
+  const { sum, stats } = renderDebrief(s, $('debrief'), stored);
   summary = sum;
   const { id, list } = record(s, sum, stats);
   $('debrief').insertAdjacentHTML('beforeend', renderHistory(list.slice(-10), id));
@@ -230,8 +231,11 @@ async function importFiles(files: File[]) {
   if (!sessions.length && !warmups.length) throw new Error('no SENSINT session or backup files');
   if (warmups.length) saveWarmups(warmups);
   if (sessions.length === 1 && !warmups.length && !skipped.length) return debrief(sessions[0]);
+  // Store them all first, so each verdict combines with earlier sessions from any of the files.
+  await Promise.all(sessions.map(putSession)).catch(() => { /* IndexedDB unavailable */ });
+  const stored = await allSessions().catch(() => sessions);
   const scratch = document.createElement('div'); // analysis renders here, off-screen
-  for (const s of sessions) { const { sum, stats } = renderDebrief(s, scratch); record(s, sum, stats); }
+  for (const s of sessions) { const { sum, stats } = renderDebrief(s, scratch, stored); record(s, sum, stats); }
   showFile();
   const note = document.createElement('p');
   note.className = skipped.length ? 'warn' : 'hint';
@@ -264,7 +268,7 @@ $('debrief').addEventListener('click', async (e) => {
   if (!el) return;
   if (el.dataset.exportAll !== undefined) return exportAll(el);
   const s = await getSession(el.dataset.open!).catch(() => undefined);
-  if (s) debrief(s);
+  if (s) await debrief(s);
   else el.textContent = 'Not stored in full; open its JSON file';
 });
 /** Both file pickers: import the chosen files, clearing the input so the same file can be picked again. */

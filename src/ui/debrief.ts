@@ -21,11 +21,21 @@ const COLUMNS: [MetricKey, string, string, number][] = [
 ];
 export type Stats = Partial<Record<MetricKey, number>>;
 
-/** Renders the full subject file into el; returns its shareable summary and session-wide metric means. */
-export function renderDebrief(s: Session, el: HTMLElement): { sum: Summary; stats: Stats } {
+// Same game, type and candidate sensitivities: rounds from these sessions measure the same thing and can pool.
+// ponytail: follow-ups centred elsewhere don't pool; that needs a per-session offset in the curve fit
+const setup = (s: Session) => [s.intake.game, s.intake.kind ?? 'hip', ...s.candidates.map((c) => r1(c.cm360)).sort((a, b) => a - b)].join();
+
+/**
+ * Renders the full subject file into el; returns its shareable summary and session-wide metric means.
+ * Earlier sessions in `stored` with the same candidates are combined in, so each repeat narrows the range.
+ */
+export function renderDebrief(s: Session, el: HTMLElement, stored: Session[] = []): { sum: Summary; stats: Stats } {
   const game = (s.intake.game in games ? s.intake.game : 'tarkov') as GameId;
-  const logs = s.trials.map((t) => t.log).filter((l): l is DrillLog => !!l);
-  const { byCode, rec } = analyze(s.trials.filter((t) => t.log).map((t) => ({ ...t, log: t.log! })), games[game].weights);
+  const pool = s.candidates.length > 1 ? stored.filter((o) => o.createdAt < s.createdAt && setup(o) === setup(s)) : [];
+  const code = new Map(s.candidates.map((c) => [r1(c.cm360), c.code])); // earlier sessions' letters → this one's
+  const sessions = [...pool, s].map((o) => o.trials.filter((t) => t.log).map((t) => ({ ...t, code: code.get(r1(t.cm360))!, log: t.log! })));
+  const logs = sessions.flat().map((t) => t.log);
+  const { byCode, rec } = analyze(sessions, games[game].weights);
   const codes = Object.entries(byCode).sort((a, b) => a[1].cm360 - b[1].cm360);
 
   // Current sensitivity inside the band = the data can't show a change would help, so keep it.
@@ -39,6 +49,7 @@ export function renderDebrief(s: Session, el: HTMLElement): { sum: Summary; stat
     aim: !ads && s.intake.game === 'tarkov' && s.intake.aimingSens && s.intake.sens ? s.intake.aimingSens / s.intake.sens : null,
     rec: rec && { final: r1(final!), peak: r1(rec.cm360), lo: r1(rec.lo), hi: r1(rec.hi), conf: rec.confidence, edge: rec.edge },
     c: codes.map(([code, c]) => [code, r1(c.cm360), Math.round(c.score)]),
+    ...(pool.length ? { n: pool.length + 1 } : {}),
   };
 
   const hz = 1000 / median(logs.flatMap((l) => l.moves.slice(1).map((m, i) => m.t - l.moves[i].t)));
@@ -54,7 +65,7 @@ export function renderDebrief(s: Session, el: HTMLElement): { sum: Summary; stat
     <h3>Findings</h3>
     <ul>${findings(codes).map((f) => `<li>${f}</li>`).join('')}</ul>
     <p class="hint">Data quality: ${raw ? 'raw input on every trial' : '<span class="warn">some trials without raw input</span>'} ·
-      ~${fmt(hz, 0)} Hz mouse reports · ${logs.length} trials. Score 50 = your session average.</p>`;
+      ~${fmt(hz, 0)} Hz mouse reports · ${logs.length} trials${pool.length ? ` from ${pool.length + 1} sessions` : ''}. Score 50 = your session average.</p>`;
   return { sum, stats };
 }
 
@@ -87,14 +98,14 @@ export function renderCard(s: Summary): string {
   const unit = s.ads ? 'red-dot cm/360' : 'cm/360';
   const verdict = r
     ? `<p class="big">${keep ? 'Keep ' : ''}${fmt(r.final)} <small>${unit}</small></p>
-       <p>Best range ${fmt(r.lo)}–${fmt(r.hi)} ${unit} · <strong>${esc(r.conf)} confidence</strong> · fitted peak ${fmt(r.peak)} ·
+       <p>Best range ${fmt(r.lo)}–${fmt(r.hi)} ${unit} · <strong>${esc(r.conf)} confidence</strong>${s.n ? ` · ${s.n} sessions combined` : ''} · fitted peak ${fmt(r.peak)} ·
          weighted for ${esc(g.name)}</p>
        <p>${keep
          ? `Current ${fmt(s.cur)} ${unit} is inside the best range: changing would not measurably help.`
          : `Current ${fmt(s.cur)} ${unit} is outside the best range; move to ${fmt(r.final)}.`}</p>
        ${r.edge ? `<p class="warn">The best result was the ${r.edge === 'fast' ? 'fastest' : 'slowest'} candidate tested, so the true optimum
          may lie ${r.edge === 'fast' ? 'faster' : 'slower'} still. A follow-up session centred here would find it.</p>` : ''}
-       ${r.conf === 'low' ? '<p class="hint">Low confidence: several sensitivities scored within noise of each other. Another session narrows the range.</p>' : ''}`
+       ${r.conf === 'low' ? '<p class="hint">Low confidence: several sensitivities scored within noise of each other. Another session at the same settings is combined with this one and narrows the range.</p>' : ''}`
     : '<p>Quick test: one candidate only, so there is no recommendation. Run a full session for a verdict.</p>';
   return `
     <div class="dossier-head">

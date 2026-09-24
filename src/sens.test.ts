@@ -12,6 +12,7 @@ import { decode, encode, type Summary } from './share';
 import { backupBlob, readBackup, sessionId } from './history';
 import { renderWarmup, routine, sameSettings, stepSeconds, type WarmupEntry } from './ui/warmup';
 import { latestSettings } from './ui/file';
+import { renderDebrief } from './ui/debrief';
 
 test('CS2 800 DPI @ 1.2 is ~43.3 cm/360 and round-trips', () => {
   const cm = cm360FromGame(800, 1.2, 0.022);
@@ -278,7 +279,8 @@ test('My file settings: latest hip and red-dot verdicts become in-game numbers',
 
 test('recorded session (Chip, 2026-09-24) analyses end to end', () => {
   const s = JSON.parse(gunzipSync(readFileSync('tests/fixtures/session-625932.json.gz')).toString()) as Session;
-  const { points, byCode, rec } = analyze(s.trials.map((t) => ({ ...t, log: t.log! })), games.tarkov.weights);
+  const trials = s.trials.map((t) => ({ ...t, log: t.log! }));
+  const { points, byCode, rec } = analyze([trials], games.tarkov.weights);
   expect(points).toHaveLength(10);
   expect(Object.keys(byCode)).toHaveLength(5);
   for (const p of points) expect(p.score).toBeGreaterThanOrEqual(0);
@@ -292,4 +294,27 @@ test('recorded session (Chip, 2026-09-24) analyses end to end', () => {
   // ALPHA (16.8) and BRAVO (28.0, current) tied; the band must cover both, so the verdict is "keep".
   expect(rec!.lo).toBeLessThanOrEqual(byCode.ALPHA.cm360 + 1e-9);
   expect(rec!.hi).toBeGreaterThanOrEqual(s.intake.baselineCm360 - 1e-9);
+  // The same rounds played twice pool into twice the points and a band no wider than one session's.
+  const two = analyze([trials, trials], games.tarkov.weights);
+  expect(two.points).toHaveLength(20);
+  expect(two.rec!.hi / two.rec!.lo).toBeLessThanOrEqual(rec!.hi / rec!.lo + 1e-9);
+});
+
+test('a repeat session with the same candidates combines with the earlier one; other setups do not', async () => {
+  const s1 = JSON.parse(gunzipSync(readFileSync('tests/fixtures/session-625932.json.gz')).toString()) as Session;
+  const later = new Date(Date.parse(s1.createdAt) + 864e5).toISOString();
+  // Same sensitivities under different code letters, as a new session's shuffle would give.
+  const letters = new Map(s1.candidates.map((c, i) => [c.code, s1.candidates[(i + 1) % 5].code]));
+  const s2: Session = { ...s1, createdAt: later, trials: s1.trials.map((t) => ({ ...t, code: letters.get(t.code)! })),
+    candidates: s1.candidates.map((c) => ({ ...c, code: letters.get(c.code)! })) };
+  const el = { innerHTML: '' } as HTMLElement;
+  const alone = renderDebrief(s2, el, []).sum;
+  const both = renderDebrief(s2, el, [s1, s2]).sum; // s2 itself in the store is not counted twice
+  expect(alone.n).toBeUndefined();
+  expect(both.n).toBe(2);
+  expect(el.innerHTML).toContain('from 2 sessions');
+  expect(both.rec!.hi / both.rec!.lo).toBeLessThanOrEqual(alone.rec!.hi / alone.rec!.lo + 1e-9);
+  const other = { ...s1, intake: { ...s1.intake, game: 'cs2' } };
+  expect(renderDebrief(s2, el, [other]).sum.n).toBeUndefined();
+  expect((await decode(await encode(both))).n).toBe(2); // survives a share link
 });

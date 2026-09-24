@@ -243,17 +243,22 @@ function fitPeak(points: Point[]): Peak | null {
 export type TrialIn = { code: string; cm360: number; drill: DrillName; log: DrillLog };
 
 /**
- * Normalize each metric against the player's own session (z-score across trials),
+ * Normalize each metric against the player's own session (z-score across that session's trials),
  * combine with game weights per candidate repeat, map to 0–100 (50 = session average).
+ * Several sessions of the same candidates pool their rounds: each is normalized on its own, so a
+ * better or worse day doesn't shift one session's scores against another's.
  */
-export function analyze(trials: TrialIn[], weights: Partial<Record<MetricKey, number>>) {
-  const rows = trials.map((t) => ({ ...t, m: metrics(t.log) }));
-  const stat = {} as Record<MetricKey, { mu: number; sd: number }>;
-  for (const k of Object.keys(METRICS) as MetricKey[]) {
-    const v = rows.map((r) => r.m[k]).filter((x): x is number => Number.isFinite(x));
-    const mu = mean(v);
-    stat[k] = { mu, sd: Math.sqrt(mean(v.map((x) => (x - mu) ** 2))) };
-  }
+export function analyze(sessions: TrialIn[][], weights: Partial<Record<MetricKey, number>>) {
+  const rows = sessions.flatMap((trials) => {
+    const rs = trials.map((t) => ({ ...t, m: metrics(t.log) }));
+    const stat = {} as Record<MetricKey, { mu: number; sd: number }>;
+    for (const k of Object.keys(METRICS) as MetricKey[]) {
+      const v = rs.map((r) => r.m[k]).filter((x): x is number => Number.isFinite(x));
+      const mu = mean(v);
+      stat[k] = { mu, sd: Math.sqrt(mean(v.map((x) => (x - mu) ** 2))) };
+    }
+    return rs.map((r) => ({ ...r, stat }));
+  });
   const reps = new Map<string, { code: string; cm360: number; sum: number; w: number }>();
   const seen: Record<string, number> = {};
   for (const r of rows) {
@@ -263,7 +268,8 @@ export function analyze(trials: TrialIn[], weights: Partial<Record<MetricKey, nu
     for (const [k, v] of Object.entries(r.m) as [MetricKey, number][]) {
       const w = weights[k] ?? 0;
       if (!w || !Number.isFinite(v)) continue;
-      e.sum += w * (stat[k].sd ? (METRICS[k] * (v - stat[k].mu)) / stat[k].sd : 0);
+      const st = r.stat[k];
+      e.sum += w * (st.sd ? (METRICS[k] * (v - st.mu)) / st.sd : 0);
       e.w += w;
     }
   }

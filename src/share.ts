@@ -8,6 +8,7 @@ export type Summary = {
   rec: { final: number; peak: number; lo: number; hi: number; conf: 'high' | 'medium' | 'low'; edge: 'fast' | 'slow' | null } | null;
   c: [code: string, cm360: number, score: number][];
   ads?: { hip: number; aiming: number }; // red-dot session: Tarkov settings at the verdict
+  n?: number; // sessions of the same candidates combined into this verdict; absent = this session alone
 };
 
 const pipe = (bytes: BlobPart, t: CompressionStream | DecompressionStream) =>
@@ -38,6 +39,7 @@ function validate(o: any): Summary {
   const sens = (x: unknown) => num(x, 0.001, 10, 'sensitivity');
   return {
     ...(o.ads === undefined ? {} : { ads: { hip: sens(o.ads?.hip), aiming: sens(o.ads.aiming) } }),
+    ...(o.n === undefined ? {} : { n: num(o.n, 2, 200, 'session count') }),
     v: 1,
     name: typeof o.name === 'string' ? o.name.slice(0, 24) : '',
     game: o.game, date: o.date, dpi: num(o.dpi, 50, 64000, 'dpi'), cur: cm(o.cur),
