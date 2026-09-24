@@ -24,6 +24,14 @@ form { display: grid; gap: .9rem; }
 label { display: grid; gap: .25rem; font-size: .85rem; text-transform: uppercase; }
 input, select, button { font: inherit; padding: .45rem; border: 1px solid var(--ink); background: #f6f1e3; color: var(--ink); }
 button { background: var(--ink); color: var(--paper); cursor: pointer; text-transform: uppercase; }
+button.secondary { background: transparent; color: var(--ink); }
+#result button { margin: 1rem .5rem 0 0; }
+.kicker { margin: 0; color: var(--red); text-transform: uppercase; font-size: .8rem; letter-spacing: .1em; }
+#brief h2 { margin: .3rem 0 .8rem; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+th, td { text-align: right; padding: .35rem .4rem; border-bottom: 1px solid #0003; }
+th:first-child, td:first-child { text-align: left; }
+th { text-transform: uppercase; font-size: .7rem; color: var(--muted); }
 .field output { font-weight: bold; font-size: 1.2rem; }
 .warn { color: var(--red); font-size: .85rem; }
 .hint { color: var(--muted); font-size: .8rem; margin: 0; }

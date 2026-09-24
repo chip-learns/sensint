@@ -7,28 +7,40 @@
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
-  <main id="intake" class="file">
+  <main id="file" class="file">
     <header>
       <span class="stamp">Classified</span>
       <h1>SENSINT</h1>
-      <p class="sub">Sensitivity Intelligence · Intake form</p>
+      <p class="sub">Sensitivity Intelligence · <span id="stage-name">Intake form</span></p>
     </header>
+
     <form id="form">
       <label>Mouse DPI <input name="dpi" type="number" min="100" max="32000" value="600" required /></label>
-      <label>Game
-        <select name="game"></select>
-      </label>
+      <label>Game <select name="game"></select></label>
       <label>Current in-game sensitivity <input name="sens" type="number" step="any" min="0.001" required /></label>
+      <label id="aiming-row">Aiming sensitivity (recorded; used in Phase 2) <input name="aiming" type="number" step="any" min="0" /></label>
+      <label>Mousepad width, cm (optional) <input name="pad" type="number" step="any" min="0" /></label>
       <p class="field">Baseline <output name="cm360">—</output> cm/360</p>
       <p id="warn" class="warn" hidden></p>
       <label>Seed <input name="seed" type="number" /></label>
-      <button type="submit">Begin Flick trial (30 s)</button>
-      <p class="hint">Click to fire. Esc aborts. Chrome or Edge recommended for raw input.</p>
+      <button type="submit">Begin session (~15 min)</button>
+      <button id="quick" type="button" class="secondary">Quick Flick test (30 s)</button>
+      <p class="hint">Chrome or Edge recommended for raw input. Esc aborts a trial; it restarts from the beginning.</p>
     </form>
+
+    <section id="brief" hidden>
+      <p class="kicker" id="brief-kicker"></p>
+      <h2 id="brief-title"></h2>
+      <p id="brief-text"></p>
+      <button id="go" type="button">Start</button>
+    </section>
+
     <section id="result" hidden>
       <h2>Field report</h2>
-      <pre id="summary"></pre>
+      <p class="hint">Raw counts, unscored. Scoring and the recommendation land in Phase 1c.</p>
+      <div id="summary"></div>
       <button id="export" type="button">Export session JSON</button>
+      <button id="again" type="button" class="secondary">New session</button>
     </section>
   </main>
   <canvas id="stage" hidden></canvas>

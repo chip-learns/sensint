@@ -1,8 +1,17 @@
 import games from '../data/games.json';
+import { onTargetPct, rng } from './analysis/aim';
 import { cm360FromGame } from './analysis/sens';
-import { runFlick, type FlickLog } from './drills/flick';
+import { DRILLS, flick } from './drills';
+import { runDrill, type Drill, type DrillLog, type DrillName } from './drills/stage';
+import { candidates, schedule, type Candidate } from './session';
 
 type GameId = keyof typeof games;
+type Trial = Candidate & { drill: DrillName; log?: DrillLog };
+
+// ponytail: fixed CS2 hip FOV (106.26° at 16:9); per-game FOV matching lands in Phase 2
+const FOV_H = 106.26;
+const ROUNDS = 2;
+
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
 const f = form.elements as unknown as Record<string, HTMLInputElement & HTMLOutputElement & HTMLSelectElement>;
@@ -19,49 +28,98 @@ const baseline = () => {
   f.cm360.value = Number.isFinite(cm) ? cm.toFixed(1) : '—';
   $('warn').hidden = g.verified;
   $('warn').textContent = `${g.name} conversion constant is unverified; treat cm/360 as approximate.`;
+  $('aiming-row').hidden = f.game.value !== 'tarkov';
   return cm;
 };
 form.addEventListener('input', baseline);
 baseline();
 
-let last: FlickLog | undefined;
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const cm360 = baseline();
-  if (!Number.isFinite(cm360)) return;
-  const canvas = $<HTMLCanvasElement>('stage');
-  $('intake').hidden = true;
-  canvas.hidden = $('crosshair').hidden = false;
-  try {
-    // ponytail: fixed CS2 hip FOV (106.26° at 16:9); per-game FOV matching lands in Phase 2
-    last = await runFlick(canvas, { cm360, dpi: +f.dpi.value, seed: +f.seed.value, fovH: 106.26, durationMs: 30_000 });
-    report(last);
-  } finally {
-    canvas.hidden = $('crosshair').hidden = true;
-    $('intake').hidden = false;
-  }
-});
+const show = (pane: 'form' | 'brief' | 'result' | 'stage', label = '') => {
+  for (const id of ['form', 'brief', 'result'] as const) $(id).hidden = id !== pane;
+  $('file').hidden = pane === 'stage';
+  $('stage').hidden = $('crosshair').hidden = pane !== 'stage';
+  if (label) $('stage-name').textContent = label;
+};
 
-function report(log: FlickLog) {
-  const hits = log.shots.filter((s) => s.hit);
-  const ttt = hits.map((h, i) => h.t - log.spawns[i].t);
-  const avg = ttt.length ? ttt.reduce((a, b) => a + b) / ttt.length : NaN;
-  $('summary').textContent = [
-    `cm/360      ${log.cm360.toFixed(1)}`,
-    `raw input   ${log.rawInput ? 'yes' : 'NO — session flagged'}`,
-    `targets hit ${hits.length}`,
-    `shots       ${log.shots.length} (${log.shots.length ? Math.round((100 * hits.length) / log.shots.length) : 0}% accuracy)`,
-    `avg TTT     ${Number.isFinite(avg) ? Math.round(avg) + ' ms' : '—'}`,
-    `mouse events ${log.moves.length}`,
-  ].join('\n');
-  $('result').hidden = false;
+/** Show a briefing card; resolves on the Start click (the user gesture pointer lock needs). */
+const brief = (kicker: string, title: string, text: string) =>
+  new Promise<void>((resolve) => {
+    $('brief-kicker').textContent = kicker;
+    $('brief-title').textContent = title;
+    $('brief-text').textContent = text;
+    show('brief');
+    $('go').onclick = () => resolve();
+  });
+
+/** Brief, run, and re-run on Esc until a clean log comes back. */
+async function play(kicker: string, title: string, text: string, cm360: number, make: () => Drill, seed: number) {
+  for (;;) {
+    await brief(kicker, title, text);
+    show('stage');
+    const log = await runDrill($('stage'), { cm360, dpi: +f.dpi.value, seed, fovH: FOV_H }, make());
+    if (!log.aborted) return log;
+    text = 'Aborted. This trial restarts from the beginning with the same targets.';
+  }
 }
 
+let last: object | undefined;
+
+async function session(quick: boolean) {
+  const cm = baseline();
+  if (!Number.isFinite(cm) || !form.reportValidity()) return;
+  const seed = +f.seed.value;
+  const rand = rng(seed);
+  const intake = {
+    dpi: +f.dpi.value, game: f.game.value, sens: +f.sens.value,
+    aimingSens: f.game.value === 'tarkov' && f.aiming.value ? +f.aiming.value : null,
+    padCm: f.pad.value ? +f.pad.value : null, seed, baselineCm360: cm,
+  };
+  const cands = quick ? [{ code: 'BASELINE', cm360: cm }] : candidates(cm, rand);
+  const plan: Trial[] = quick
+    ? [{ ...cands[0], drill: 'flick' }]
+    : schedule(cands, ROUNDS, rand).flatMap((c) => (Object.keys(DRILLS) as DrillName[]).map((drill) => ({ ...c, drill })));
+
+  try {
+    show('brief', quick ? 'Quick test' : 'Field trials');
+    const warmup = quick ? null : await play('Warm-up · not scored', 'Flick at your current sensitivity',
+      '75 s to get your hands going. Nothing here counts.', cm, () => flick(75_000), seed);
+    for (const [i, t] of plan.entries()) {
+      const d = DRILLS[t.drill];
+      t.log = await play(`Trial ${i + 1} of ${plan.length}`, `Candidate ${t.code} · ${d.label}`, d.brief, t.cm360, d.make, seed + i + 1);
+    }
+    last = { app: 'sensint', version: 1, createdAt: new Date().toISOString(), intake, candidates: cands, warmup, trials: plan };
+    report(cands, plan);
+  } catch (e) {
+    show('form', 'Intake form');
+    $('warn').hidden = false;
+    $('warn').textContent = `Could not start the trial: ${(e as Error).message}`;
+  }
+}
+
+function report(cands: Candidate[], plan: Trial[]) {
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b) / xs.length : NaN);
+  const fmt = (x: number, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : '—');
+  const hits = (l: DrillLog) => l.shots.filter((s) => s.hit).length;
+  const rows = [...cands].sort((a, b) => a.cm360 - b.cm360).map((c) => {
+    const logs = (d: DrillName) => plan.filter((t) => t.code === c.code && t.drill === d).map((t) => t.log!);
+    return `<tr><td>${c.code}</td><td>${fmt(c.cm360)}</td><td>${fmt(mean(logs('flick').map(hits)))}</td>`
+      + `<td>${fmt(mean(logs('track').map(onTargetPct)))}</td><td>${fmt(mean(logs('micro').map(hits)))}</td></tr>`;
+  });
+  const flagged = plan.some((t) => !t.log!.rawInput);
+  $('summary').innerHTML = `<table><thead><tr><th>Code</th><th>cm/360</th><th>Flick hits</th><th>Track % on</th><th>Micro hits</th></tr></thead>`
+    + `<tbody>${rows.join('')}</tbody></table>`
+    + (flagged ? '<p class="warn">Raw input was not available for some trials; those measurements include OS acceleration.</p>' : '');
+  show('result', 'Field report');
+}
+
+form.addEventListener('submit', (e) => { e.preventDefault(); session(false); });
+$('quick').addEventListener('click', () => session(true));
+$('again').addEventListener('click', () => show('form', 'Intake form'));
 $('export').addEventListener('click', () => {
   if (!last) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(last)], { type: 'application/json' }));
-  a.download = `sensint-flick-${last.seed}.json`;
+  a.download = `sensint-session-${f.seed.value}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 });
