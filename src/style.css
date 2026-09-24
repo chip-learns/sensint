@@ -69,6 +69,11 @@ body[data-cue="right"] #cue { right: 24px; border-left: 56px solid #ff2a1acc; }
 .history-tools { display: flex; flex-wrap: wrap; gap: .5rem; }
 .history-tools .file-btn { display: inline-block; }
 button.link { padding: 0 .3rem; background: none; border: none; color: var(--red); text-decoration: underline; text-transform: none; }
+.spark polyline { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.spark circle { fill: var(--red); }
+td.better { color: #2f6b1f; font-weight: bold; }
+td.worse { color: var(--red); }
+td.same { color: var(--muted); }
 #share-out { display: block; width: 100%; margin-top: .8rem; font-size: .75rem; }
 .chart .code { font-weight: bold; fill: var(--ink); }
 .file:has(#result:not([hidden])) { max-width: 44rem; }

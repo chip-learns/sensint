@@ -1,11 +1,13 @@
 import games from '../data/games.json';
 import { rng } from './analysis/aim';
 import { adsFovH, aimingForRedDot, cm360FromGame, gameSensFromCm360, redDotCm360 } from './analysis/sens';
-import { DRILLS, flick } from './drills';
+import { DRILLS, flick, MAKE } from './drills';
 import { runDrill, type Drill, type DrillName } from './drills/stage';
 import { candidates, schedule, type Intake, type Session, type Trial } from './session';
 import { decode, encode, type Summary } from './share';
-import { allSessions, backupBlob, getSession, loadHistory, putSession, readSessions, saveToHistory, sessionId } from './history';
+import { allSessions, backupBlob, getSession, loadHistory, loadWarmups, putSession, readBackup, saveToHistory, saveWarmups, sessionId } from './history';
+import { metrics } from './analysis/score';
+import { HEADLINE, renderWarmup, routine, stepSeconds, type WarmupEntry } from './ui/warmup';
 import { renderCard, renderDebrief, renderHistory, type Stats } from './ui/debrief';
 
 type GameId = keyof typeof games;
@@ -35,8 +37,17 @@ const baseline = () => {
   $('warn').textContent = `${g.name} conversion constant is unverified; treat cm/360 as approximate.`;
   $('aiming-row').hidden = f.game.value !== 'tarkov';
   const red = redDot(cm);
-  $('reddot-row').hidden = f.kind.value !== 'ads';
+  const warm = f.kind.value === 'warmup';
+  $('reddot-row').hidden = !(f.kind.value === 'ads' || (warm && f.game.value === 'tarkov'));
   f.reddot.value = Number.isFinite(red) ? red.toFixed(1) : '— (needs Tarkov + aiming sensitivity)';
+  $('latest').hidden = $('length-row').hidden = !warm;
+  $('rounds-row').hidden = warm;
+  if (warm) {
+    const steps = routine(f.game.value, cm, Number.isFinite(red) ? red : null, FOV_H, FOV_H);
+    $('preset').textContent = steps.map((s) => s.label).join(' · ');
+    $('begin').textContent = `Begin warm-up (${f.minutes.value} min)`;
+    return cm;
+  }
   // warm-up + per round 5 candidates × (the preset's drills + the countdown before each),
   // + ~10 s for each drill type's first card
   const drills = preset();
@@ -200,8 +211,9 @@ function showHistory() {
 
 /** A session file opens its debrief; a backup (or several sessions) is stored, then the history shows. */
 async function importFile(file: File) {
-  const sessions = await readSessions(file);
-  if (sessions.length === 1) return debrief(sessions[0]);
+  const { sessions, warmups } = await readBackup(file);
+  if (warmups.length) saveWarmups(warmups);
+  if (sessions.length === 1 && !warmups.length) return debrief(sessions[0]);
   const scratch = document.createElement('div'); // analysis renders here, off-screen
   for (const s of sessions) { const { sum, stats } = renderDebrief(s, scratch); record(s, sum, stats); }
   showHistory();
@@ -211,11 +223,12 @@ async function exportAll(button: HTMLElement) {
   const sessions = await allSessions().catch(() => [] as Session[]);
   if (!sessions.length) { button.textContent = 'No full sessions stored yet'; return; }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(await backupBlob(sessions));
+  const warmups = loadWarmups();
+  a.href = URL.createObjectURL(await backupBlob(sessions, warmups));
   a.download = `sensint-backup-${new Date().toISOString().slice(0, 10)}.json.gz`;
   a.click();
   URL.revokeObjectURL(a.href);
-  button.textContent = `Exported ${sessions.length} sessions`;
+  button.textContent = `Exported ${sessions.length} sessions, ${warmups.length} warm-ups`;
 }
 
 const fail = (err: unknown) => {
@@ -258,7 +271,61 @@ async function openLink() {
 addEventListener('hashchange', openLink);
 openLink();
 
-form.addEventListener('submit', (e) => { e.preventDefault(); session(false); });
+/** Warm-up: the fixed routine at your settings, back to back, then results against earlier warm-ups. */
+async function warmUp() {
+  const cm = baseline();
+  if (!Number.isFinite(cm) || !form.reportValidity()) return;
+  const red = redDot(cm);
+  const steps = routine(f.game.value, cm, Number.isFinite(red) ? red : null, FOV_H, adsFovH(FOV_H, K));
+  const minutes = +f.minutes.value;
+  const secs = stepSeconds(minutes, steps.length, COUNTDOWN_MS / 1000);
+  const seed = Math.floor(Math.random() * 1e6); // fresh targets every warm-up
+  const intro = `${minutes} minutes at your settings, about ${secs} s per drill: ${steps.map((s) => s.label).join(', ')}. `
+    + 'Drills run back to back with a short countdown. Press Esc any time to pause.';
+  const results: Record<string, number> = {};
+  try {
+    for (const [i, s] of steps.entries()) {
+      $('crosshair').classList.toggle('reddot', s.reddot);
+      const log = await play(`Warm-up · ${i + 1} of ${steps.length}`, s.label, i ? DRILLS[s.drill].brief : intro,
+        s.cm360, () => MAKE[s.drill](secs * 1000), seed + i, s.fovH, i === 0);
+      const v = metrics(log)[HEADLINE[s.drill][0]];
+      if (v !== undefined && Number.isFinite(v)) results[s.key] = v;
+    }
+    document.exitPointerLock();
+    const now = new Date();
+    const entry: WarmupEntry = {
+      id: now.toISOString(), date: now.toISOString().slice(0, 10), game: f.game.value, minutes,
+      hipCm: Math.round(cm * 10) / 10, redCm: Number.isFinite(red) ? Math.round(red * 10) / 10 : null, results,
+    };
+    $('debrief').innerHTML = renderWarmup(entry, saveWarmups([entry]));
+    for (const b of ['export', 'follow', 'share', 'share-out']) $(b).hidden = true;
+    $('again').textContent = 'Back';
+    show('result', 'Warm-up results');
+  } catch (e) {
+    document.exitPointerLock();
+    show('form', 'Intake form');
+    $('warn').hidden = false;
+    $('warn').textContent = `Could not start the warm-up: ${(e as Error).message}`;
+  }
+}
+
+/** Fill hip (and Tarkov aiming) from your latest saved verdicts for this game, at the current DPI. */
+$('latest').addEventListener('click', () => {
+  const g = games[f.game.value as GameId];
+  const mine = loadHistory().filter((e) => e.game === f.game.value && e.rec);
+  const hip = mine.filter((e) => e.kind === 'hip').at(-1), ads = mine.filter((e) => e.kind === 'ads').at(-1);
+  if (!g.yaw || (!hip && !ads)) { $('latest').textContent = 'No saved verdicts for this game yet'; return; }
+  if (hip) f.sens.value = gameSensFromCm360(hip.rec!.final, +f.dpi.value, g.yaw).toFixed(3);
+  if (ads && f.game.value === 'tarkov' && +f.sens.value > 0) {
+    // Keep the red dot at its verdict speed for whatever hip sensitivity is now set.
+    const hipCm = cm360FromGame(+f.dpi.value, +f.sens.value, g.yaw);
+    f.aiming.value = aimingForRedDot(ads.rec!.final, hipCm, +f.sens.value, K).toFixed(3);
+  }
+  $('latest').textContent = `Filled from ${[hip && `hip ${hip.date}`, ads && `red dot ${ads.date}`].filter(Boolean).join(' and ')}`;
+  baseline();
+});
+
+form.addEventListener('submit', (e) => { e.preventDefault(); if (f.kind.value === 'warmup') warmUp(); else session(false); });
 $('quick').addEventListener('click', () => session(true));
 $('again').addEventListener('click', () => {
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);

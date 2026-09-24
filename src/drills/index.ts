@@ -171,6 +171,9 @@ export const turn = (durationMs = 12_000): Drill => {
   };
 };
 
+/** Each drill at a chosen length (warm-up mode). */
+export const MAKE: Record<DrillName, (durationMs: number) => Drill> = { flick, track, micro, door, scope, turn };
+
 export const DRILLS: Record<DrillName, { make: () => Drill; label: string; brief: string; seconds: number }> = {
   flick: { make: () => flick(), seconds: 10, label: 'Flick', brief: '10 s. One target at a time. Snap to it and click.' },
   track: { make: () => track(), seconds: 12, label: 'Track', brief: '12 s. Keep the crosshair on the target as it pans. No clicking; it turns green while you are on it.' },

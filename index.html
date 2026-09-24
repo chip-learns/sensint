@@ -27,11 +27,20 @@
         <select name="kind">
           <option value="hip" selected>Hip sensitivity</option>
           <option value="ads">Red-dot aiming (Tarkov)</option>
+          <option value="warmup">Warm-up at my settings</option>
         </select>
       </label>
+      <button id="latest" type="button" class="secondary" hidden>Use my latest verdicts</button>
       <p id="reddot-row" class="field" hidden>Red-dot baseline <output name="reddot">—</output> cm/360</p>
       <p class="hint">Drills: <span id="preset"></span></p>
-      <label>Rounds per candidate
+      <label id="length-row" hidden>Warm-up length
+        <select name="minutes">
+          <option value="3">3 minutes</option>
+          <option value="5" selected>5 minutes</option>
+          <option value="10">10 minutes</option>
+        </select>
+      </label>
+      <label id="rounds-row">Rounds per candidate
         <select name="rounds">
           <option value="2" selected>2 (recommended)</option>
           <option value="3">3 (longer, narrower range)</option>

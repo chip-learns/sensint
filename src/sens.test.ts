@@ -9,7 +9,8 @@ import { doorway, DRILLS, nudge, pan, strafe } from './drills';
 import type { DrillLog } from './drills/stage';
 import { candidates, schedule, type Session } from './session';
 import { decode, encode, type Summary } from './share';
-import { backupBlob, readSessions, sessionId } from './history';
+import { backupBlob, readBackup, sessionId } from './history';
+import { renderWarmup, routine, sameSettings, stepSeconds, type WarmupEntry } from './ui/warmup';
 
 test('CS2 800 DPI @ 1.2 is ~43.3 cm/360 and round-trips', () => {
   const cm = cm360FromGame(800, 1.2, 0.022);
@@ -230,11 +231,34 @@ test('pad check: 180° travel against pad width minus the mouse', async () => {
 test('backup file round-trips sessions; single session files still open; junk is rejected', async () => {
   const a = { app: 'sensint', version: 1, createdAt: '2026-09-24T10:00:00.000Z', intake: { seed: 1 }, trials: [] } as unknown as Session;
   const b = { ...a, createdAt: '2026-09-25T10:00:00.000Z', intake: { seed: 2 } } as unknown as Session;
-  const gz = await backupBlob([a, b]);
-  expect(await readSessions(new File([gz], 'sensint-backup.json.gz'))).toEqual([a, b]);
-  expect(await readSessions(new File([JSON.stringify(a)], 'sensint-session-1.json'))).toEqual([a]);
-  await expect(readSessions(new File(['{"hello":1}'], 'x.json'))).rejects.toThrow('not a SENSINT');
+  const w: WarmupEntry = { id: '2026-09-26T08:00:00.000Z', date: '2026-09-26', game: 'tarkov', minutes: 5, hipCm: 23.1, redCm: 44.2, results: { 'hip:flick': 900 } };
+  const gz = await backupBlob([a, b], [w]);
+  expect(await readBackup(new File([gz], 'sensint-backup.json.gz'))).toEqual({ sessions: [a, b], warmups: [w] });
+  expect(await readBackup(new File([JSON.stringify(a)], 'sensint-session-1.json'))).toEqual({ sessions: [a], warmups: [] });
+  await expect(readBackup(new File(['{"hello":1}'], 'x.json'))).rejects.toThrow('not a SENSINT');
   expect(sessionId(a) < sessionId(b)).toBe(true); // ids sort by time
+});
+
+test('warm-up: routine at your speeds, fills the length, compares only like-for-like', () => {
+  const tarkov = routine('tarkov', 23.1, 44.2, 106.26, 92);
+  expect(tarkov.map((s) => s.key)).toEqual(['hip:flick', 'hip:micro', 'hip:track', 'hip:turn', 'ads:door', 'ads:flick', 'scope:scope']);
+  expect(tarkov.filter((s) => s.key.startsWith('hip')).every((s) => s.cm360 === 23.1 && !s.reddot)).toBe(true);
+  expect(tarkov.find((s) => s.key === 'ads:door')).toMatchObject({ cm360: 44.2, fovH: 92, reddot: true });
+  expect(routine('tarkov', 23.1, null, 106.26, 92)).toHaveLength(4); // no aiming sensitivity: hip block only
+  expect(routine('cs2', 40, 44.2, 106.26, 92)).toHaveLength(4);
+  // 5 min over 7 drills with a 2 s countdown each: (300 - 15 - 14) / 7 ≈ 39 s
+  expect(stepSeconds(5, 7, 2)).toBe(39);
+  expect(stepSeconds(3, 7, 2) * 7 + 15 + 14).toBeLessThanOrEqual(3 * 60 + 5);
+
+  const base: WarmupEntry = { id: '2026-09-26T08:00:00.000Z', date: '2026-09-26', game: 'tarkov', minutes: 5, hipCm: 23.1, redCm: 44.2, results: { 'hip:flick': 1000, 'hip:track': 60 } };
+  const today = { ...base, id: '2026-09-27T08:00:00.000Z', date: '2026-09-27', results: { 'hip:flick': 900, 'hip:track': 55 } };
+  const otherSens = { ...base, id: '2026-09-26T09:00:00.000Z', hipCm: 28, results: { 'hip:flick': 500, 'hip:track': 99 } };
+  expect(sameSettings(base, today)).toBe(true);
+  expect(sameSettings(base, otherSens)).toBe(false);
+  const html = renderWarmup(today, [base, otherSens, today]);
+  expect(html).toMatch(/900 ms<\/strong>.*1000 ms.*better/s); // faster flick than last time
+  expect(html).toMatch(/55%<\/strong>.*60%.*worse/s); // less time on target
+  expect(html).not.toContain('500 ms'); // a warm-up at other settings is never compared
 });
 
 test('recorded session (Chip, 2026-09-24) analyses end to end', () => {
