@@ -9,6 +9,7 @@ import { allSessions, backupBlob, getSession, loadHistory, loadWarmups, putSessi
 import { metrics } from './analysis/score';
 import { HEADLINE, renderWarmup, routine, stepSeconds, type WarmupEntry } from './ui/warmup';
 import { renderCard, renderDebrief, renderHistory, type Stats } from './ui/debrief';
+import { latestSettings, renderFile, summaryLine } from './ui/file';
 
 type GameId = keyof typeof games;
 
@@ -42,6 +43,9 @@ const baseline = () => {
   f.reddot.value = Number.isFinite(red) ? red.toFixed(1) : '— (needs Tarkov + aiming sensitivity)';
   $('latest').hidden = $('length-row').hidden = !warm;
   $('rounds-row').hidden = warm;
+  const line = summaryLine(f.game.value, +f.dpi.value, +f.sens.value);
+  $('mine').hidden = !line;
+  $('mine-text').textContent = line;
   if (warm) {
     const steps = routine(f.game.value, cm, Number.isFinite(red) ? red : null, FOV_H, FOV_H);
     $('preset').textContent = steps.map((s) => s.label).join(' · ');
@@ -201,12 +205,12 @@ function debrief(s: Session) {
   show('result', 'Debrief');
 }
 
-/** Every session saved in this browser, with backup export and import. */
-function showHistory() {
-  $('debrief').innerHTML = renderHistory(loadHistory(), '');
+/** My file: current settings from your latest verdicts, warm-up progress, every saved session, backups. */
+function showFile() {
+  $('debrief').innerHTML = renderFile(+f.dpi.value, +f.sens.value);
   for (const b of ['export', 'follow', 'share', 'share-out']) $(b).hidden = true;
-  $('again').textContent = 'New session';
-  show('result', 'Your sessions');
+  $('again').textContent = 'Back';
+  show('result', 'My file');
 }
 
 /** A session file opens its debrief; a backup (or several sessions) is stored, then the history shows. */
@@ -216,7 +220,7 @@ async function importFile(file: File) {
   if (sessions.length === 1 && !warmups.length) return debrief(sessions[0]);
   const scratch = document.createElement('div'); // analysis renders here, off-screen
   for (const s of sessions) { const { sum, stats } = renderDebrief(s, scratch); record(s, sum, stats); }
-  showHistory();
+  showFile();
 }
 
 async function exportAll(button: HTMLElement) {
@@ -252,7 +256,8 @@ $('debrief').addEventListener('change', (e) => {
   input.value = '';
   if (file) importFile(file).catch(fail);
 });
-$('history').addEventListener('click', showHistory);
+$('history').addEventListener('click', showFile);
+$('mine-open').addEventListener('click', showFile);
 
 /** Someone's share link: the card only. */
 async function openLink() {
@@ -311,17 +316,11 @@ async function warmUp() {
 
 /** Fill hip (and Tarkov aiming) from your latest saved verdicts for this game, at the current DPI. */
 $('latest').addEventListener('click', () => {
-  const g = games[f.game.value as GameId];
-  const mine = loadHistory().filter((e) => e.game === f.game.value && e.rec);
-  const hip = mine.filter((e) => e.kind === 'hip').at(-1), ads = mine.filter((e) => e.kind === 'ads').at(-1);
-  if (!g.yaw || (!hip && !ads)) { $('latest').textContent = 'No saved verdicts for this game yet'; return; }
-  if (hip) f.sens.value = gameSensFromCm360(hip.rec!.final, +f.dpi.value, g.yaw).toFixed(3);
-  if (ads && f.game.value === 'tarkov' && +f.sens.value > 0) {
-    // Keep the red dot at its verdict speed for whatever hip sensitivity is now set.
-    const hipCm = cm360FromGame(+f.dpi.value, +f.sens.value, g.yaw);
-    f.aiming.value = aimingForRedDot(ads.rec!.final, hipCm, +f.sens.value, K).toFixed(3);
-  }
-  $('latest').textContent = `Filled from ${[hip && `hip ${hip.date}`, ads && `red dot ${ads.date}`].filter(Boolean).join(' and ')}`;
+  const s = latestSettings(f.game.value, +f.dpi.value, +f.sens.value);
+  if (!s) { $('latest').textContent = 'No saved verdicts for this game yet'; return; }
+  if (s.hip?.entry) f.sens.value = s.hip.sens.toFixed(3);
+  if (s.ads) f.aiming.value = s.ads.aiming.toFixed(3);
+  $('latest').textContent = `Filled from ${[s.hip?.entry && `hip ${s.hip.entry.date}`, s.ads && `red dot ${s.ads.entry.date}`].filter(Boolean).join(' and ')}`;
   baseline();
 });
 
@@ -330,6 +329,7 @@ $('quick').addEventListener('click', () => session(true));
 $('again').addEventListener('click', () => {
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   newSeed();
+  baseline(); // refresh the settings line: a session may have just added a verdict
   show('form', 'Intake form');
 });
 

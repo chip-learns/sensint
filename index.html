@@ -15,6 +15,7 @@
     </header>
 
     <form id="form">
+      <p id="mine" class="mine" hidden><span id="mine-text"></span> <button id="mine-open" type="button" class="link">My file</button></p>
       <label>Mouse DPI <input name="dpi" type="number" min="100" max="32000" value="600" required /></label>
       <label>Game <select name="game"></select></label>
       <label>Current in-game sensitivity <input name="sens" type="number" step="any" min="0.001" required /></label>
@@ -50,7 +51,7 @@
       <button id="begin" type="submit">Begin session</button>
       <button id="quick" type="button" class="secondary">Quick Flick test (12 s)</button>
       <label class="file-btn secondary">Open saved session or backup <input id="open" type="file" accept=".json,.gz,application/json,application/gzip" /></label>
-      <button id="history" type="button" class="secondary">Your sessions</button>
+      <button id="history" type="button" class="secondary">My file (settings, warm-ups, sessions)</button>
       <p class="hint">Chrome or Edge recommended for raw input. Esc aborts a trial; it restarts from the beginning.</p>
     </form>
 

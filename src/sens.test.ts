@@ -11,6 +11,7 @@ import { candidates, schedule, type Session } from './session';
 import { decode, encode, type Summary } from './share';
 import { backupBlob, readBackup, sessionId } from './history';
 import { renderWarmup, routine, sameSettings, stepSeconds, type WarmupEntry } from './ui/warmup';
+import { latestSettings } from './ui/file';
 
 test('CS2 800 DPI @ 1.2 is ~43.3 cm/360 and round-trips', () => {
   const cm = cm360FromGame(800, 1.2, 0.022);
@@ -259,6 +260,20 @@ test('warm-up: routine at your speeds, fills the length, compares only like-for-
   expect(html).toMatch(/900 ms<\/strong>.*1000 ms.*better/s); // faster flick than last time
   expect(html).toMatch(/55%<\/strong>.*60%.*worse/s); // less time on target
   expect(html).not.toContain('500 ms'); // a warm-up at other settings is never compared
+});
+
+test('My file settings: latest hip and red-dot verdicts become in-game numbers', () => {
+  const e = (id: string, kind: 'hip' | 'ads', final: number, game = 'tarkov') =>
+    ({ id, date: id.slice(0, 10), game, kind, cur: final, stats: {}, rec: { final, peak: final, lo: final - 2, hi: final + 2, conf: 'low' as const, edge: null } });
+  const hist = [e('2026-09-24a', 'hip', 28.0), e('2026-09-24b', 'hip', 23.1), e('2026-09-24c', 'ads', 44.2)];
+  const s = latestSettings('tarkov', 600, 0.435, hist)!;
+  expect(s.hip!.sens).toBeCloseTo(0.528, 3); // latest hip verdict wins, not the older 28.0
+  expect(s.ads!.aiming).toBeCloseTo(0.356, 3); // matches the red-dot verdict worked out by hand
+  // No hip verdict yet: aiming is computed against your current hip setting.
+  const onlyAds = latestSettings('tarkov', 600, 0.528, [hist[2]])!;
+  expect(onlyAds.hip!.entry).toBeUndefined();
+  expect(onlyAds.ads!.aiming).toBeCloseTo(0.356, 2);
+  expect(latestSettings('cs2', 600, 1, hist)).toBeNull(); // Tarkov verdicts don't count as CS2 ones
 });
 
 test('recorded session (Chip, 2026-09-24) analyses end to end', () => {

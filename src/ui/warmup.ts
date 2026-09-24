@@ -51,7 +51,8 @@ export const sameSettings = (a: WarmupEntry, b: WarmupEntry) =>
   a.game === b.game && Math.abs(a.hipCm - b.hipCm) < 0.3
   && (a.redCm === null ? b.redCm === null : b.redCm !== null && Math.abs(a.redCm - b.redCm) < 0.3);
 
-export function renderWarmup(entry: WarmupEntry, all: WarmupEntry[]) {
+/** Results of one warm-up against earlier ones. `inFile`: shown inside My file (no page header, "Latest" wording). */
+export function renderWarmup(entry: WarmupEntry, all: WarmupEntry[], inFile = false) {
   const prev = all.filter((e) => e.id !== entry.id && sameSettings(e, entry) && e.id < entry.id);
   const rows = Object.entries(entry.results).map(([key, today]) => {
     const drill = key.split(':')[1] as DrillName;
@@ -66,12 +67,15 @@ export function renderWarmup(entry: WarmupEntry, all: WarmupEntry[]) {
       <td>${Number.isFinite(avg) ? `${fmt(avg, d)}${unit}` : '—'}</td><td class="${verdict}">${verdict}</td><td>${spark(trend, sign)}</td></tr>`;
   });
   const g = games[entry.game as GameId]?.name ?? entry.game;
-  return `<div class="dossier-head"><p class="kicker">Warm-up · ${esc(entry.date)} · ${esc(g)} · ${entry.minutes} min</p>
-      <h2>Pre-raid warm-up</h2></div>
-    <p>Hip ${fmt(entry.hipCm, 1)} cm/360${entry.redCm ? ` · red dot ${fmt(entry.redCm, 1)} cm/360` : ''}</p>
-    <table><thead><tr><th>Drill</th><th>Measure</th><th>Today</th><th>Last 5</th><th></th><th>Trend</th></tr></thead>
+  const count = all.filter((e) => sameSettings(e, entry)).length;
+  const head = inFile
+    ? `<p>Latest warm-up ${esc(entry.date)} (${entry.minutes} min) · ${count} warm-up${count === 1 ? '' : 's'} at these settings`
+    : `<div class="dossier-head"><p class="kicker">Warm-up · ${esc(entry.date)} · ${esc(g)} · ${entry.minutes} min</p>
+      <h2>Pre-raid warm-up</h2></div><p>`;
+  return `${head}<br>Hip ${fmt(entry.hipCm, 1)} cm/360${entry.redCm ? ` · red dot ${fmt(entry.redCm, 1)} cm/360` : ''}</p>
+    <table><thead><tr><th>Drill</th><th>Measure</th><th>${inFile ? 'Latest' : 'Today'}</th><th>Last 5</th><th></th><th>Trend</th></tr></thead>
     <tbody>${rows.join('')}</tbody></table>
-    <p class="hint">${prev.length ? `Compared with your ${Math.min(prev.length, 5)} previous warm-ups at these settings.` : 'Your first warm-up at these settings; later ones will be compared here.'}
+    <p class="hint">${prev.length ? `Compared with your ${Math.min(prev.length, 5) === 1 ? 'previous warm-up' : `${Math.min(prev.length, 5)} previous warm-ups`} at these settings.` : 'Your first warm-up at these settings; later ones will be compared here.'}
       Trend lines rise when you improve. Warm-ups never change your sensitivity verdicts.</p>`;
 }
 
