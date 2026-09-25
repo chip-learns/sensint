@@ -207,7 +207,16 @@ function chart(s: Summary) {
       <polyline points="${pts.join(' ')}" class="fit"/>
       <line x1="${px}" x2="${px}" y1="${T}" y2="${H - B}" class="verdict"/>`;
   }
-  const ticks = s.c.map(([code, cm]) =>
+  // Follow-up sessions pull in PRIOR candidates, so ticks crowd: label this session's candidates first,
+  // then any PRIOR that still has room. 46 fits a 7-letter code at the chart's 10px monospace.
+  const shown: number[] = [];
+  const labelled = [...s.c].sort((p, q) => Number(p[0] === 'PRIOR') - Number(q[0] === 'PRIOR')).filter(([, cm]) => {
+    const x = X(Math.log(cm));
+    if (shown.some((sx) => Math.abs(sx - x) < 46)) return false;
+    shown.push(x);
+    return true;
+  });
+  const ticks = labelled.map(([code, cm]) =>
     `<text x="${X(Math.log(cm))}" y="${H - B + 14}" text-anchor="middle">${fmt(cm)}</text>
      <text x="${X(Math.log(cm))}" y="${H - B + 27}" text-anchor="middle" class="code">${esc(code)}</text>`).join('');
   const grid = [0, 50, 100].map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="grid"/>
