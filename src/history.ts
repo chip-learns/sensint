@@ -11,16 +11,19 @@ const MAX = 200;
 
 export const sessionId = (s: Session) => `${s.createdAt}#${s.intake.seed}`; // sorts by time
 
-export function loadHistory(): HistoryEntry[] {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { return []; }
-}
-
-/** Add or replace this session (same id = same session reopened), oldest first. Returns the list. */
-export function saveToHistory(e: HistoryEntry): HistoryEntry[] {
-  const list = [...loadHistory().filter((x) => x.id !== e.id), e].sort((a, b) => a.id.localeCompare(b.id)).slice(-MAX);
-  try { localStorage.setItem(KEY, JSON.stringify(list)); } catch { /* private window or storage full: history just isn't kept */ }
+const load = <T>(key: string): T[] => {
+  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
+};
+/** Merge entries in (same id = same one reopened), oldest first, newest `max` kept. Returns the list. */
+function save<T extends { id: string }>(key: string, add: T[], max: number): T[] {
+  const ids = new Set(add.map((x) => x.id));
+  const list = [...load<T>(key).filter((x) => !ids.has(x.id)), ...add].sort((a, b) => a.id.localeCompare(b.id)).slice(-max);
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* private window or storage full: just not kept */ }
   return list;
 }
+
+export const loadHistory = () => load<HistoryEntry>(KEY);
+export const saveToHistory = (e: HistoryEntry) => save(KEY, [e], MAX);
 
 // IndexedDB: one object store of full sessions keyed by sessionId.
 const openDb = () => new Promise<IDBDatabase>((resolve, reject) => {
@@ -43,22 +46,12 @@ export const allSessions = () => store<Session[]>('readonly', (st) => st.getAll(
 
 // Warm-ups: small result summaries only (no raw logs), kept apart from sensitivity sessions.
 const WKEY = 'sensint.warmups';
-export function loadWarmups(): WarmupEntry[] {
-  try { return JSON.parse(localStorage.getItem(WKEY) ?? '[]'); } catch { return []; }
-}
-/** Merge warm-ups in (same id = same warm-up), oldest first. Returns the full list. */
-export function saveWarmups(add: WarmupEntry[]): WarmupEntry[] {
-  const ids = new Set(add.map((w) => w.id));
-  const list = [...loadWarmups().filter((w) => !ids.has(w.id)), ...add].sort((a, b) => a.id.localeCompare(b.id)).slice(-MAX * 5);
-  try { localStorage.setItem(WKEY, JSON.stringify(list)); } catch { /* not kept */ }
-  return list;
-}
-
-export type Backup = { app: 'sensint-backup'; version: 1; createdAt: string; sessions: Session[]; warmups?: WarmupEntry[] };
+export const loadWarmups = () => load<WarmupEntry>(WKEY);
+export const saveWarmups = (add: WarmupEntry[]) => save(WKEY, add, MAX * 5);
 
 /** Every stored session and warm-up in one gzipped JSON file. */
-export async function backupBlob(sessions: Session[], warmups: WarmupEntry[] = []): Promise<Blob> {
-  const b: Backup = { app: 'sensint-backup', version: 1, createdAt: new Date().toISOString(), sessions, warmups };
+export async function backupBlob(sessions: Session[], warmups: WarmupEntry[]): Promise<Blob> {
+  const b = { app: 'sensint-backup', version: 1, createdAt: new Date().toISOString(), sessions, warmups };
   return new Response(new Blob([JSON.stringify(b)]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
 }
 

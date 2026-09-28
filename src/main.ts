@@ -6,9 +6,9 @@ import { runDrill, type Drill, type DrillName } from './drills/stage';
 import { candidates, schedule, type Intake, type Session, type Trial } from './session';
 import { decode, encode, type Summary } from './share';
 import { allSessions, backupBlob, getSession, loadHistory, loadWarmups, putSession, readBackup, saveToHistory, saveWarmups, sessionId } from './history';
-import { metrics } from './analysis/score';
+import { metrics, type Metrics } from './analysis/score';
 import { HEADLINE, renderWarmup, routine, stepSeconds, type WarmupEntry } from './ui/warmup';
-import { renderCard, renderDebrief, renderHistory, type Stats } from './ui/debrief';
+import { renderCard, renderDebrief, renderHistory } from './ui/debrief';
 import { latestSettings, renderFile, summaryLine } from './ui/file';
 
 type GameId = keyof typeof games;
@@ -85,6 +85,13 @@ const show = (pane: 'form' | 'brief' | 'result' | 'stage', label = '') => {
   if (label) $('stage-name').textContent = label;
 };
 
+/** Back to the intake form with a warning. */
+const warn = (msg: string) => {
+  $('warn').hidden = false;
+  $('warn').textContent = msg;
+  show('form', 'Intake form');
+};
+
 /** Show a briefing card; resolves on the Start click (the user gesture pointer lock needs). */
 const brief = (kicker: string, title: string, text: string) =>
   new Promise<void>((resolve) => {
@@ -140,11 +147,7 @@ async function session(quick: boolean) {
   // Red-dot session: candidates are red-dot turn speeds, played zoomed with a red-dot reticle.
   const ads = !quick && f.kind.value === 'ads';
   const red = redDot(cm);
-  if (ads && !Number.isFinite(red)) {
-    $('warn').hidden = false;
-    $('warn').textContent = 'A red-dot session needs Escape from Tarkov with your aiming sensitivity filled in.';
-    return;
-  }
+  if (ads && !Number.isFinite(red)) return warn('A red-dot session needs Escape from Tarkov with your aiming sensitivity filled in.');
   const base = ads ? red : cm;
   const fovH = ads ? adsFovH(FOV_H, K) : FOV_H;
   $('crosshair').classList.toggle('reddot', ads);
@@ -173,23 +176,21 @@ async function session(quick: boolean) {
     for (const [i, t] of plan.entries()) {
       const d = DRILLS[t.drill];
       t.log = await play(`Trial ${i + 1} of ${plan.length}`, `Candidate ${t.code} · ${d.label}${ads ? ' · red dot' : ''}`, d.brief,
-        t.cm360, d.make, seed + i + 1, fovH, !seen.has(t.drill));
+        t.cm360, () => MAKE[t.drill](d.seconds * 1000), seed + i + 1, fovH, !seen.has(t.drill));
       seen.add(t.drill);
     }
     document.exitPointerLock();
     await debrief({ app: 'sensint', version: 1, createdAt: new Date().toISOString(), intake, candidates: cands, warmup, trials: plan });
   } catch (e) {
     document.exitPointerLock();
-    show('form', 'Intake form');
-    $('warn').hidden = false;
-    $('warn').textContent = `Could not start the trial: ${(e as Error).message}`;
+    warn(`Could not start the trial: ${(e as Error).message}`);
   }
 }
 
 let summary: Summary | undefined;
 
 /** Keep a session: its summary for the history table, the full session for reopening later. */
-function record(s: Session, sum: Summary, stats: Stats) {
+function record(s: Session, sum: Summary, stats: Metrics) {
   putSession(s).catch(() => { /* IndexedDB unavailable: the summary list still works */ });
   const id = sessionId(s);
   return { id, list: saveToHistory({ id, date: sum.date, game: sum.game, kind: s.intake.kind ?? 'hip', rec: sum.rec, cur: sum.cur, stats }) };
@@ -257,11 +258,7 @@ async function exportAll(button: HTMLElement) {
   button.textContent = `Exported ${sessions.length} sessions, ${warmups.length} warm-ups`;
 }
 
-const fail = (err: unknown) => {
-  $('warn').hidden = false;
-  $('warn').textContent = `Could not open that file: ${(err as Error).message}`;
-  show('form', 'Intake form');
-};
+const fail = (err: unknown) => warn(`Could not open that file: ${(err as Error).message}`);
 
 // History table controls live inside #debrief, so listen there.
 $('debrief').addEventListener('click', async (e) => {
@@ -308,8 +305,7 @@ async function openLink() {
     $('again').textContent = 'Run your own session';
     show('result', 'Shared subject file');
   } catch (e) {
-    $('warn').hidden = false;
-    $('warn').textContent = `Could not read that share link (${(e as Error).message}).`;
+    warn(`Could not read that share link (${(e as Error).message}).`);
   }
 }
 addEventListener('hashchange', openLink);
@@ -347,9 +343,7 @@ async function warmUp() {
     show('result', 'Warm-up results');
   } catch (e) {
     document.exitPointerLock();
-    show('form', 'Intake form');
-    $('warn').hidden = false;
-    $('warn').textContent = `Could not start the warm-up: ${(e as Error).message}`;
+    warn(`Could not start the warm-up: ${(e as Error).message}`);
   }
 }
 

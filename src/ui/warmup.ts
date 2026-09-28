@@ -1,8 +1,9 @@
 // Warm-up mode: a fixed routine at your own settings, with results compared to your earlier warm-ups.
 import games from '../../data/games.json';
-import type { MetricKey } from '../analysis/score';
+import { mean, type MetricKey } from '../analysis/score';
 import { DRILLS } from '../drills';
 import type { DrillName } from '../drills/stage';
+import { esc, fmt } from './debrief';
 
 type GameId = keyof typeof games;
 
@@ -43,9 +44,6 @@ export const HEADLINE: Record<DrillName, [MetricKey, string, string, number, 1 |
   scope: ['scopeOn', 'on target', '%', 0, 1],
 };
 
-const esc = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const fmt = (x: number | undefined, d = 0) => (x !== undefined && Number.isFinite(x) ? x.toFixed(d) : '—');
-
 /** Same game and the same turn speeds (within 0.3 cm/360): results are directly comparable. */
 export const sameSettings = (a: WarmupEntry, b: WarmupEntry) =>
   a.game === b.game && Math.abs(a.hipCm - b.hipCm) < 0.3
@@ -59,7 +57,7 @@ export function renderWarmup(entry: WarmupEntry, all: WarmupEntry[], inFile = fa
     const [, what, unit, d, sign] = HEADLINE[drill];
     const label = { hip: 'Hip', ads: 'Red dot', scope: '4× scope' }[key.split(':')[0]] ?? '';
     const last5 = prev.slice(-5).map((e) => e.results[key]).filter(Number.isFinite);
-    const avg = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : NaN;
+    const avg = mean(last5);
     const delta = today - avg;
     const verdict = !Number.isFinite(delta) ? '' : Math.abs(delta) < 0.02 * Math.abs(avg) ? 'same' : sign * delta > 0 ? 'better' : 'worse';
     const trend = [...prev.slice(-19).map((e) => e.results[key]), today].filter(Number.isFinite);

@@ -2,12 +2,11 @@
 import games from '../../data/games.json';
 import { aimingForRedDot, cm360FromGame, gameSensFromCm360 } from '../analysis/sens';
 import { loadHistory, loadWarmups } from '../history';
-import { renderHistory, type HistoryEntry } from './debrief';
+import { fmt, renderHistory, type HistoryEntry } from './debrief';
 import { renderWarmup } from './warmup';
 
 type GameId = keyof typeof games;
 const K = games.tarkov.adsFactor;
-const fmt = (x: number, d: number) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 
 export type Settings = {
   hip?: { cm: number; sens: number; entry?: HistoryEntry }; // entry absent = your current setting, no verdict yet

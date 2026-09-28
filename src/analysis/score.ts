@@ -13,7 +13,7 @@ export const median = (xs: number[]) => {
 };
 
 /** Aim after every raw move, starting at 0,0 (as the drill does). */
-export function trace(log: DrillLog): Pt[] {
+function trace(log: DrillLog): Pt[] {
   const k = degPerCount(log.cm360, log.dpi);
   const aim: Aim = { yaw: 0, pitch: 0 };
   const out: Pt[] = [{ t: -Infinity, ...aim }];
@@ -45,7 +45,8 @@ export type Flick = { dist: number; ttt: number; overshoot: number; undershoot: 
  * undershoot = the first movement stopped (no forward progress for 50 ms) short of the hitbox;
  * settle = first entering the hitbox → the click.
  */
-export function flicks(log: DrillLog, tr = trace(log)): Flick[] {
+export function flicks(log: DrillLog): Flick[] {
+  const tr = trace(log);
   // ponytail: planar yaw/pitch approximation; fine for |pitch| ≤ ~20°. Use great-circle geometry if pitch range grows.
   const r = log.targetRadiusDeg;
   const tg = targets(log);
@@ -84,7 +85,8 @@ export function micros(log: DrillLog) {
 }
 
 /** Track: % of frames on target and mean angular error, replayed from raw moves. */
-export function trackStats(log: DrillLog, tr = trace(log)) {
+export function trackStats(log: DrillLog) {
+  const tr = trace(log);
   // ponytail: per-frame, not per-ms; frames are near-uniform. Weight by frame dt if refresh rates vary mid-run.
   let on = 0, err = 0;
   for (const p of log.path) {
@@ -101,7 +103,8 @@ export function trackStats(log: DrillLog, tr = trace(log)) {
  * count against it); drift = mean distance from the nearest doorway while waiting, sampled every
  * 50 ms from 400 ms after each peek ends (time to settle back) until the next one starts.
  */
-export function doorStats(log: DrillLog, tr = trace(log)) {
+export function doorStats(log: DrillLog) {
+  const tr = trace(log);
   const peeks = log.spawns, doors = log.props ?? [];
   const hits = log.shots.filter((s) => s.hit);
   const react = hits.map((h) => h.t - peeks.filter((p) => p.t <= h.t).at(-1)!.t);

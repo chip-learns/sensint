@@ -2,7 +2,7 @@ import { angleBetween, nextTarget, type Aim } from '../analysis/aim';
 import type { Drill, DrillName } from './stage';
 
 /** Flick: one small target at a time, 5–35° away, always on-screen. */
-export const flick = (durationMs = 10_000): Drill => ({
+export const flick = (durationMs: number): Drill => ({
   name: 'flick', durationMs, radiusDeg: 0.9,
   start: (c, t) => c.place(t, nextTarget(c.aim, c.rand)),
   click: (c, t, hit) => { if (hit) c.place(t, nextTarget(c.aim, c.rand)); },
@@ -27,9 +27,8 @@ export function strafe(rand: () => number, durationS: number, halfWidth = 35, sp
     t += dur;
   }
   return (at: number) => {
-    let i = segs.length - 1;
-    while (i > 0 && segs[i].t > at) i--;
-    return segs[i].yaw + segs[i].vel * (at - segs[i].t);
+    const s = segs.findLast((x) => x.t <= at) ?? segs[0];
+    return s.yaw + s.vel * (at - s.t);
   };
 }
 
@@ -70,15 +69,13 @@ export function pan(
     else dir = -dir; // ease straight into a reversal
   }
   return (at: number) => {
-    let i = segs.length - 1;
-    while (i > 0 && segs[i].t > at) i--;
-    const s = segs[i], dt = at - s.t;
+    const s = segs.findLast((x) => x.t <= at) ?? segs[0], dt = at - s.t;
     return s.yaw + s.v * dt + 0.5 * s.a * dt * dt;
   };
 }
 
 /** Track: follow a panning target; it turns green while you're on it. No clicking. */
-export const track = (durationMs = 12_000): Drill => {
+export const track = (durationMs: number): Drill => {
   let yawAt = (_: number) => 0;
   return {
     name: 'track', durationMs, radiusDeg: 2, highlight: true,
@@ -94,7 +91,7 @@ export function nudge(a: Aim, rand: () => number): Aim {
 }
 
 /** Micro-correct: short flick (10–40°); the target jumps 1–3° as you arrive. */
-export const micro = (durationMs = 10_000): Drill => {
+export const micro = (durationMs: number): Drill => {
   let nudged = false;
   const spawn: Drill['start'] = (c, t) => { nudged = false; c.place(t, nextTarget(c.aim, c.rand, 10, 40)); };
   return {
@@ -123,7 +120,7 @@ export function doorway(rand: () => number): { center: Aim; spots: Aim[] } {
  * crouched) for 500–900 ms, every 1–3 s. Shooting while nothing is showing is a miss.
  * Playtest: 250–600 ms peeks with a 0.9° head felt unfair (median reaction ~450 ms caught ~30%).
  */
-export const door = (durationMs = 12_000): Drill => {
+export const door = (durationMs: number): Drill => {
   let spots: Aim[] = [], next = 0, hideAt = -1;
   const wait = (c: { rand: () => number }, t: number) => { hideAt = -1; next = t + 1000 + c.rand() * 2000; };
   return {
@@ -147,7 +144,7 @@ export const door = (durationMs = 12_000): Drill => {
  * distant target walking 0.8–1.7°/s within ±4°. Stay on it; it turns green while you are.
  * Its walker keeps the original strafe motion: it felt right in playtest.
  */
-export const scope = (durationMs = 10_000): Drill => {
+export const scope = (durationMs: number): Drill => {
   let yawAt = (_: number) => 0;
   return {
     name: 'scope', durationMs, radiusDeg: 0.3, highlight: true, zoom: 4, mask: true,
@@ -157,7 +154,7 @@ export const scope = (durationMs = 10_000): Drill => {
 };
 
 /** Large turn: targets 90–180° away; an arrow at the screen edge shows which way until it's near. */
-export const turn = (durationMs = 12_000): Drill => {
+export const turn = (durationMs: number): Drill => {
   const spawn: Drill['start'] = (c, t) => {
     const tg = nextTarget(c.aim, c.rand, 90, 180);
     c.place(t, tg);
@@ -171,14 +168,14 @@ export const turn = (durationMs = 12_000): Drill => {
   };
 };
 
-/** Each drill at a chosen length (warm-up mode). */
+/** Each drill at a chosen length. */
 export const MAKE: Record<DrillName, (durationMs: number) => Drill> = { flick, track, micro, door, scope, turn };
 
-export const DRILLS: Record<DrillName, { make: () => Drill; label: string; brief: string; seconds: number }> = {
-  flick: { make: () => flick(), seconds: 10, label: 'Flick', brief: '10 s. One target at a time. Snap to it and click.' },
-  track: { make: () => track(), seconds: 12, label: 'Track', brief: '12 s. Keep the crosshair on the target as it pans. No clicking; it turns green while you are on it.' },
-  micro: { make: () => micro(), seconds: 10, label: 'Micro-correct', brief: '10 s. Short flicks; the target shifts slightly as you arrive. Correct, then click.' },
-  door: { make: () => door(), seconds: 12, label: 'Door watch', brief: '12 s. Hold the doorway. A head peeks briefly from either edge, standing or crouched: hit it. Shooting while nothing is showing is a miss.' },
-  scope: { make: () => scope(), seconds: 10, label: 'Long-range scope', brief: '10 s. Through a 4× scope, keep the dot on a distant walking target. No clicking; it turns green while you are on it.' },
-  turn: { make: () => turn(), seconds: 12, label: 'Large turn', brief: '12 s. Targets appear behind you; the arrow at the screen edge shows which way to turn. Turn, then click.' },
+export const DRILLS: Record<DrillName, { label: string; brief: string; seconds: number }> = {
+  flick: { seconds: 10, label: 'Flick', brief: '10 s. One target at a time. Snap to it and click.' },
+  track: { seconds: 12, label: 'Track', brief: '12 s. Keep the crosshair on the target as it pans. No clicking; it turns green while you are on it.' },
+  micro: { seconds: 10, label: 'Micro-correct', brief: '10 s. Short flicks; the target shifts slightly as you arrive. Correct, then click.' },
+  door: { seconds: 12, label: 'Door watch', brief: '12 s. Hold the doorway. A head peeks briefly from either edge, standing or crouched: hit it. Shooting while nothing is showing is a miss.' },
+  scope: { seconds: 10, label: 'Long-range scope', brief: '10 s. Through a 4× scope, keep the dot on a distant walking target. No clicking; it turns green while you are on it.' },
+  turn: { seconds: 12, label: 'Large turn', brief: '12 s. Targets appear behind you; the arrow at the screen edge shows which way to turn. Turn, then click.' },
 };

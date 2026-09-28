@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { angleBetween, applyMove, dir, rng, type Aim } from '../analysis/aim';
-import { degPerCount } from '../analysis/sens';
+import { adsFovH, degPerCount } from '../analysis/sens';
 import { lockPointer, MOVE_EVENT, onMove, type Move } from '../input/pointer';
 
 const RAD = Math.PI / 180;
@@ -53,7 +53,7 @@ export async function runDrill(
   const rawInput = document.pointerLockElement === canvas ? lastRaw : (lastRaw = await lockPointer(canvas));
   const zoom = drill.zoom ?? 1;
   const cm360 = opts.cm360 * zoom;
-  const fovH = 2 * Math.atan(Math.tan((opts.fovH * RAD) / 2) / zoom) / RAD;
+  const fovH = adsFovH(opts.fovH, zoom); // same narrowing as aiming down sights
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setSize(innerWidth, innerHeight);

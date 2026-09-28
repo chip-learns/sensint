@@ -1,7 +1,7 @@
 // Dossier-style debrief ("subject file"). The card (header, verdict, settings, chart) renders from a
 // Summary alone, so a share link shows the same card; the full debrief adds evidence and findings.
 import games from '../../data/games.json';
-import { analyze, fitQuadratic, median, type MetricKey } from '../analysis/score';
+import { analyze, fitQuadratic, median, type MetricKey, type Metrics } from '../analysis/score';
 import { aimingForRedDot, gameSensFromCm360 } from '../analysis/sens';
 import type { DrillLog } from '../drills/stage';
 import type { Session } from '../session';
@@ -9,8 +9,8 @@ import type { Summary } from '../share';
 
 type GameId = keyof typeof games;
 
-const esc = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const fmt = (x: number | undefined, d = 1) => (x !== undefined && Number.isFinite(x) ? x.toFixed(d) : '—');
+export const esc = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export const fmt = (x: number | undefined, d = 1) => (x !== undefined && Number.isFinite(x) ? x.toFixed(d) : '—');
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
 // Evidence columns and session stats; a column shows only when its drill ran.
@@ -19,7 +19,6 @@ const COLUMNS: [MetricKey, string, string, number][] = [
   ['microCorr', 'Micro fix', ' ms', 0], ['turnTTT', 'Turn time', ' ms', 0], ['doorReact', 'Door react', ' ms', 0],
   ['doorAcc', 'Door acc', '%', 0], ['scopeOn', 'Scope on', '%', 0],
 ];
-export type Stats = Partial<Record<MetricKey, number>>;
 
 // Earlier sessions that pool into this one: same game and type, and candidates overlapping this session's
 // range (repeats and follow-ups do), so the shared curve ties their scores together.
@@ -35,7 +34,7 @@ const shown = (code: string) => (code.startsWith(PRIOR) ? 'PRIOR' : code);
  * Renders the full subject file into el; returns its shareable summary and session-wide metric means.
  * Earlier repeats and follow-ups in `stored` are combined in, so each one narrows the range.
  */
-export function renderDebrief(s: Session, el: HTMLElement, stored: Session[] = []): { sum: Summary; stats: Stats } {
+export function renderDebrief(s: Session, el: HTMLElement, stored: Session[] = []): { sum: Summary; stats: Metrics } {
   const game = (s.intake.game in games ? s.intake.game : 'tarkov') as GameId;
   const pool = s.candidates.length > 1 ? stored.filter((o) => pools(o, s)) : [];
   const code = new Map(s.candidates.map((c) => [r1(c.cm360), c.code])); // earlier sessions' letters → this one's
@@ -62,7 +61,7 @@ export function renderDebrief(s: Session, el: HTMLElement, stored: Session[] = [
   const hz = 1000 / median(logs.flatMap((l) => l.moves.slice(1).map((m, i) => m.t - l.moves[i].t)));
   const raw = logs.every((l) => l.rawInput);
   const cols = COLUMNS.filter(([k]) => codes.some(([, c]) => Number.isFinite(c.m[k])));
-  const stats: Stats = Object.fromEntries(cols.map(([k]) =>
+  const stats: Metrics = Object.fromEntries(cols.map(([k]) =>
     [k, codes.reduce((a, [, c]) => a + (c.m[k] ?? 0), 0) / codes.filter(([, c]) => Number.isFinite(c.m[k])).length]));
   el.innerHTML = renderCard(sum) + (ads ? '' : padCheck(s.intake.padCm, sum.rec?.final)) + `
     <div class="tbl"><table><thead><tr><th>Code</th><th>cm/360</th><th>Score</th>${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>
@@ -76,7 +75,7 @@ export function renderDebrief(s: Session, el: HTMLElement, stored: Session[] = [
   return { sum, stats };
 }
 
-export type HistoryEntry = { id: string; date: string; game: string; kind: 'hip' | 'ads'; rec: Summary['rec']; cur: number; stats: Stats };
+export type HistoryEntry = { id: string; date: string; game: string; kind: 'hip' | 'ads'; rec: Summary['rec']; cur: number; stats: Metrics };
 
 /** Your sessions next to this one: verdicts, ranges, confidence, and backup controls. */
 export function renderHistory(entries: HistoryEntry[], currentId: string) {
@@ -162,7 +161,7 @@ function settingsTable(dpi: number, cm: number, aim: number | null) {
 }
 
 /** Plain-language findings, each tied to a metric, comparing best and worst candidates. */
-function findings(codes: [string, { cm360: number; m: Partial<Record<MetricKey, number>> }][]) {
+function findings(codes: [string, { cm360: number; m: Metrics }][]) {
   if (codes.length < 2) return ['Only one candidate was tested.'];
   const out: string[] = [];
   const line = (k: MetricKey, label: string, higherBetter: boolean, unit: string, d: number) => {
