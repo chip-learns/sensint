@@ -6,6 +6,8 @@ Existing finders run a feel-based "which of these two feels better?" search. Tha
 
 Everything runs in the browser: no install, no accounts, no server.
 
+**Try it: https://chip-learns.github.io/sensint/**
+
 ## Status
 
 Phase 1a: pointer lock with raw input, the Flick drill, and session JSON export.
