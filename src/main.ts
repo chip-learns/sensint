@@ -230,12 +230,13 @@ async function importFiles(files: File[]) {
   }
   if (!sessions.length && !warmups.length) throw new Error('no SENSINT session or backup files');
   if (warmups.length) saveWarmups(warmups);
-  if (sessions.length === 1 && !warmups.length && !skipped.length) return debrief(sessions[0]);
+  if (sessions.length === 1 && !warmups.length && !skipped.length) { await debrief(sessions[0]); return fillFrom(sessions); }
   // Store them all first, so each verdict combines with earlier sessions from any of the files.
   await Promise.all(sessions.map(putSession)).catch(() => { /* IndexedDB unavailable */ });
   const stored = await allSessions().catch(() => sessions);
   const scratch = document.createElement('div'); // analysis renders here, off-screen
   for (const s of sessions) { const { sum, stats } = renderDebrief(s, scratch, stored); record(s, sum, stats); }
+  fillFrom(sessions); // before showFile, so My file shows settings at your DPI, not the default
   showFile();
   const note = document.createElement('p');
   note.className = skipped.length ? 'warn' : 'hint';
@@ -264,9 +265,24 @@ const fail = (err: unknown) => {
 
 // History table controls live inside #debrief, so listen there.
 $('debrief').addEventListener('click', async (e) => {
-  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-open],[data-export-all]');
+  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-open],[data-export-all],[data-train],[data-refine]');
   if (!el) return;
   if (el.dataset.exportAll !== undefined) return exportAll(el);
+  if (el.dataset.train) {
+    // Straight into a warm-up at the latest verdicts for that game.
+    f.game.value = el.dataset.train;
+    f.kind.value = 'warmup';
+    fillLatest();
+    return warmUp();
+  }
+  if (el.dataset.refine) {
+    // A new session centred on the latest verdict, to narrow it down.
+    f.game.value = el.dataset.refine;
+    f.kind.value = el.dataset.kind ?? 'hip';
+    fillLatest();
+    newSeed();
+    return show('form', 'Intake form');
+  }
   const s = await getSession(el.dataset.open!).catch(() => undefined);
   if (s) await debrief(s);
   else el.textContent = 'Not stored in full; open its JSON file';
@@ -338,14 +354,28 @@ async function warmUp() {
 }
 
 /** Fill hip (and Tarkov aiming) from your latest saved verdicts for this game, at the current DPI. */
-$('latest').addEventListener('click', () => {
+function fillLatest() {
   const s = latestSettings(f.game.value, +f.dpi.value, +f.sens.value);
   if (!s) { $('latest').textContent = 'No saved verdicts for this game yet'; return; }
   if (s.hip?.entry) f.sens.value = s.hip.sens.toFixed(3);
   if (s.ads) f.aiming.value = s.ads.aiming.toFixed(3);
   $('latest').textContent = `Filled from ${[s.hip?.entry && `hip ${s.hip.entry.date}`, s.ads && `red dot ${s.ads.entry.date}`].filter(Boolean).join(' and ')}`;
   baseline();
-});
+}
+$('latest').addEventListener('click', fillLatest);
+
+/** After an import: the newest imported session's setup, then your latest verdicts on top. */
+function fillFrom(sessions: Session[]) {
+  if (!sessions.length) return;
+  const { intake: i } = sessions.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+  f.game.value = i.game;
+  f.dpi.value = String(i.dpi);
+  f.sens.value = String(i.sens);
+  f.aiming.value = i.aimingSens ? String(i.aimingSens) : '';
+  if (i.padCm) f.pad.value = String(i.padCm);
+  fillLatest();
+  baseline();
+}
 
 form.addEventListener('submit', (e) => { e.preventDefault(); if (f.kind.value === 'warmup') warmUp(); else session(false); });
 $('quick').addEventListener('click', () => session(true));

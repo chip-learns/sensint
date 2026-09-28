@@ -50,11 +50,14 @@ const row = (game: string, setting: string, value: string, from: string) =>
 
 export function renderFile(dpi: number, currentSens: number) {
   const entries = loadHistory();
-  const rows: string[] = [];
+  const rows: string[] = [], train: string[] = [];
   for (const id of Object.keys(games) as GameId[]) {
     const s = latestSettings(id, dpi, id === 'tarkov' ? currentSens : 0, entries);
     if (!s) continue;
     const name = games[id].short;
+    train.push(`<button type="button" data-train="${id}">Train at my ${name} settings</button>`);
+    if (s.hip?.entry) train.push(`<button type="button" data-refine="${id}">Refine my ${name} sensitivity</button>`);
+    if (s.ads) train.push(`<button type="button" data-refine="${id}" data-kind="ads">Refine my ${name} red dot</button>`);
     if (s.hip?.entry) rows.push(row(name, id === 'tarkov' ? 'Mouse sensitivity' : 'Sensitivity', fmt(s.hip.sens, 3), source(s.hip.entry, 'cm/360')));
     if (s.ads) rows.push(
       row(name, 'Mouse sensitivity (aiming)', fmt(s.ads.aiming, 3),
@@ -72,7 +75,10 @@ export function renderFile(dpi: number, currentSens: number) {
   return `<div class="dossier-head"><p class="kicker">Subject file · all sessions saved in this browser</p><h2>My file</h2></div>
     <h3>Current settings</h3>
     ${rows.length ? `<div class="tbl"><table class="settings"><tbody>${rows.join('')}</tbody></table></div>
-      <p class="hint">At ${dpi} DPI, from your latest verdict of each kind. Open a session below for its evidence.</p>`
+      <p class="hint">At ${dpi} DPI, from your latest verdict of each kind. Open a session below for its evidence.</p>
+      <p class="history-tools">${train.join('')}</p>
+      <p class="hint">Training runs the warm-up routine at these settings; results count toward warm-up progress.
+        Refining runs a new session centred on your verdict, which narrows its range.</p>`
       : '<p class="hint">No verdicts yet. Run a hip or red-dot session, or open saved sessions, and your settings will appear here.</p>'}
     <h3>Warm-up progress</h3>
     ${latest ? renderWarmup(latest, warmups, true) : '<p class="hint">No warm-ups yet. Pick "Warm-up at my settings" as the session type.</p>'}
